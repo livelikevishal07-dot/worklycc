@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.workly.employee",
+      "sha256_cert_fingerprints": [
+        "57:51:6B:E7:BF:88:43:C3:7F:90:33:D6:FA:75:8C:38:C2:0B:C5:D7:F2:1C:04:B0:0B:39:38:1E:3E:F5:46:4C"
+      ]
+    }
+  }
+]

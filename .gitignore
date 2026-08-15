@@ -16,3 +16,9 @@ next-env.d.ts
 # Claude / MCP internals
 .claude
 .mcp.json
+
+.vercel
+.env*
+
+# Android signing key + generated TWA project (contains keystore secrets)
+android-employee-app/
