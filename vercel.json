@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "comment": "Scheduled IMAP pull. Vercel's Hobby plan allows one cron run per day — on Pro this can drop to '*/10 * * * *' or similar. Day to day, new mail arrives via the Sync button and the automatic sync when the Email page opens.",
+      "path": "/api/cron/mail-sync",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}

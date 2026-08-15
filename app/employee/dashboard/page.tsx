@@ -9,6 +9,7 @@ import { WeekAttendance }    from '@/components/employee-dashboard/week-attendan
 import { LeaveOverview }     from '@/components/employee-dashboard/leave-overview'
 import { RecentAttendance }  from '@/components/employee-dashboard/recent-attendance'
 import { AnnouncementsFeed } from '@/components/employee-dashboard/announcements-feed'
+import { PinnedAnnouncements } from '@/components/employee-dashboard/pinned-announcements'
 import { LeaderboardWidget } from '@/components/leaderboard/leaderboard-widget'
 import { TodayEvents }      from '@/components/employee-dashboard/today-events'
 import { TaskDetailDrawer, type TaskDetail } from '@/components/employee-dashboard/task-detail-drawer'
@@ -39,6 +40,9 @@ export default function EmployeeDashboard() {
         breadcrumb={[{ label: 'Home' }, { label: 'Dashboard' }]}
       />
       <main className="space-y-5 px-4 py-4 sm:px-6 sm:py-6">
+        {/* Above everything, including the welcome card — a pinned notice is the
+            one thing on this page the admin has said everyone must read. */}
+        <PinnedAnnouncements />
         <WelcomeCard />
         <DailyTasksSection employeeId={employee.id} compact />
         <QuickStats />

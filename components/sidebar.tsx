@@ -4,7 +4,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import * as React from 'react'
 import {
+  AtSign,
   Download,
+  Mail,
   LayoutDashboard,
   Users,
   CheckSquare,
@@ -16,6 +18,7 @@ import {
   Repeat2,
   UserCircle,
   Megaphone,
+  NotebookPen,
   BookOpen,
   PieChart,
   ListOrdered,
@@ -201,6 +204,16 @@ const PRIMARY: NavItem[] = [
   { href: '/cms/tasks',         label: 'Tasks',         icon: CheckSquare },
   { href: '/cms/routine',       label: 'Routine',       icon: Repeat2 },
   { href: '/cms/announcements', label: 'Announcements', icon: Megaphone },
+  { href: '/cms/diary',         label: 'Daily Diary',   icon: NotebookPen },
+  {
+    href: '/cms/email', label: 'Email', icon: Mail,
+    children: [
+      { href: '/cms/email/templates', label: 'Templates', icon: FileText },
+      { href: '/cms/email/campaigns', label: 'Campaigns', icon: Megaphone },
+      { href: '/cms/email/contacts',  label: 'Contacts',  icon: Users },
+      { href: '/cms/email/mailboxes', label: 'Mailboxes', icon: AtSign },
+    ],
+  },
   {
     href: '/cms/bookings', label: 'Bookings', icon: BookOpen,
     children: [
