@@ -9,9 +9,11 @@ import {
   Eye,
   Pencil,
   Trash2,
+  X,
 } from 'lucide-react'
 
 import { Avatar } from '@/components/ui/avatar'
+import { ImpersonateButton, useImpersonate } from './impersonate-button'
 import type { Employee, EmployeeStatus } from '@/lib/db/types'
 import { cn } from '@/lib/utils'
 
@@ -57,6 +59,7 @@ export function EmployeesTable({
   const router = useRouter()
   const [pendingId, setPendingId] = React.useState<string | null>(null)
   const [errorFor, setErrorFor] = React.useState<{ id: string; message: string } | null>(null)
+  const impersonation = useImpersonate()
 
   async function handleStatusChange(employee: Employee, next: EmployeeStatus) {
     if (next === employee.status) return
@@ -111,6 +114,14 @@ export function EmployeesTable({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-card">
+      {impersonation.error && (
+        <div className="flex items-center justify-between gap-3 border-b border-coral/20 bg-coral/5 px-5 py-3 text-sm text-coral">
+          {impersonation.error}
+          <button type="button" onClick={impersonation.clearError} aria-label="Dismiss">
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -190,6 +201,13 @@ export function EmployeesTable({
                   onClick={(ev) => ev.stopPropagation()}
                 >
                   <div className="inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                    <ImpersonateButton
+                      id={e.id}
+                      name={e.full_name}
+                      disabled={e.status === 'inactive'}
+                      pending={impersonation.pendingId === e.id}
+                      onClick={impersonation.impersonate}
+                    />
                     <IconBtn label="View" onClick={() => router.push(`/cms/employees/${e.id}`)}>
                       <Eye className="size-4" />
                     </IconBtn>
