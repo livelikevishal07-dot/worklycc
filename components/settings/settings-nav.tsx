@@ -10,6 +10,7 @@ import {
   KeyRound,
   BookOpen,
   type LucideIcon,
+  Zap,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -21,6 +22,7 @@ export const SETTINGS_TABS = [
   { key: 'booking-options', label: 'Booking Options', icon: BookOpen,         hint: 'Websites & platforms for forms' },
   { key: 'general',         label: 'General',         icon: SlidersHorizontal,hint: 'Workspace preferences'          },
   { key: 'notifications',   label: 'Notifications',   icon: Bell,             hint: 'Email & in-app alerts'          },
+  { key: 'automations',     label: 'Automations',     icon: Zap,              hint: 'Birthdays, lateness, deadlines' },
   { key: 'sessions',        label: 'Sessions',        icon: KeyRound,         hint: 'Active devices'                 },
 ] as const
 

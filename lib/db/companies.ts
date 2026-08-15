@@ -22,13 +22,23 @@ export async function getCompany(id: string): Promise<Company | null> {
   return (data ?? null) as Company | null
 }
 
+/** Letterhead fields shared by create and update. */
+export interface CompanyLetterhead {
+  address?:               string | null
+  email?:                 string | null
+  phone?:                 string | null
+  website?:               string | null
+  signatory_name?:        string | null
+  signatory_designation?: string | null
+}
+
 export async function createCompany(input: {
   name: string
   slug: string
   industry?: string | null
   description?: string | null
   color?: string
-}): Promise<Company> {
+} & CompanyLetterhead): Promise<Company> {
   const { data, error } = await db()
     .from('companies')
     .insert(input)
@@ -46,7 +56,7 @@ export async function updateCompany(
     industry: string | null
     description: string | null
     color: string
-  }>
+  }> & CompanyLetterhead
 ): Promise<Company> {
   const { data, error } = await db()
     .from('companies')

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import * as React from 'react'
 import {
   AtSign,
+  BadgeCheck,
   Download,
   Mail,
   LayoutDashboard,
@@ -201,6 +202,7 @@ interface NavItem {
 const PRIMARY: NavItem[] = [
   { href: '/cms',               label: 'Dashboard',     icon: LayoutDashboard },
   { href: '/cms/employees',     label: 'Employees',     icon: Users },
+  { href: '/cms/kyc',           label: 'Employee KYC',  icon: BadgeCheck },
   { href: '/cms/tasks',         label: 'Tasks',         icon: CheckSquare },
   { href: '/cms/routine',       label: 'Routine',       icon: Repeat2 },
   { href: '/cms/announcements', label: 'Announcements', icon: Megaphone },

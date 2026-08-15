@@ -7,6 +7,7 @@ import {
   ArrowUpDown,
   ChevronDown,
   Eye,
+  FileSignature,
   Pencil,
   Trash2,
   X,
@@ -14,6 +15,7 @@ import {
 
 import { Avatar } from '@/components/ui/avatar'
 import { ImpersonateButton, useImpersonate } from './impersonate-button'
+import { LetterDrawer, type LetterTarget } from '@/components/letters/letter-drawer'
 import type { Employee, EmployeeStatus } from '@/lib/db/types'
 import { cn } from '@/lib/utils'
 
@@ -60,6 +62,7 @@ export function EmployeesTable({
   const [pendingId, setPendingId] = React.useState<string | null>(null)
   const [errorFor, setErrorFor] = React.useState<{ id: string; message: string } | null>(null)
   const impersonation = useImpersonate()
+  const [letterFor, setLetterFor] = React.useState<LetterTarget | null>(null)
 
   async function handleStatusChange(employee: Employee, next: EmployeeStatus) {
     if (next === employee.status) return
@@ -208,6 +211,12 @@ export function EmployeesTable({
                       pending={impersonation.pendingId === e.id}
                       onClick={impersonation.impersonate}
                     />
+                    <IconBtn
+                      label="Issue letter"
+                      onClick={() => setLetterFor({ id: e.id, full_name: e.full_name })}
+                    >
+                      <FileSignature className="size-4" />
+                    </IconBtn>
                     <IconBtn label="View" onClick={() => router.push(`/cms/employees/${e.id}`)}>
                       <Eye className="size-4" />
                     </IconBtn>
@@ -229,6 +238,12 @@ export function EmployeesTable({
           </tbody>
         </table>
       </div>
+
+      <LetterDrawer
+        open={letterFor !== null}
+        employee={letterFor}
+        onClose={() => setLetterFor(null)}
+      />
     </div>
   )
 }

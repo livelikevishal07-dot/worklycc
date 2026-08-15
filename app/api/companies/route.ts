@@ -12,6 +12,12 @@ const createSchema = z.object({
   industry: z.string().trim().max(120).nullable().optional(),
   description: z.string().trim().max(500).nullable().optional(),
   color: z.string().trim().max(20).default('violet'),
+  address:               z.string().trim().max(400).nullable().optional(),
+  email:                 z.string().trim().max(200).nullable().optional(),
+  phone:                 z.string().trim().max(40).nullable().optional(),
+  website:               z.string().trim().max(200).nullable().optional(),
+  signatory_name:        z.string().trim().max(120).nullable().optional(),
+  signatory_designation: z.string().trim().max(120).nullable().optional(),
 })
 
 function slugify(value: string) {

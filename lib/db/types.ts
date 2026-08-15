@@ -29,6 +29,15 @@ export interface Company {
   industry: string | null
   description: string | null
   color: string
+
+  /** Letterhead details — used when issuing offer and relieving letters. */
+  address: string | null
+  email: string | null
+  phone: string | null
+  website: string | null
+  signatory_name: string | null
+  signatory_designation: string | null
+
   created_at: string
   updated_at: string
 }

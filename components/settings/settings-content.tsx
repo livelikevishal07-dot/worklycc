@@ -5,6 +5,7 @@ import { CompaniesPanel } from './companies-panel'
 import { DepartmentsPanel } from './departments-panel'
 import { RolesPanel } from './roles-panel'
 import { BookingOptionsPanel } from './booking-options-panel'
+import { AutomationsPanel } from './automations-panel'
 import {
   GeneralPanel,
   NotificationsPanel,
@@ -27,6 +28,8 @@ export function SettingsContent() {
       return <GeneralPanel />
     case 'notifications':
       return <NotificationsPanel />
+    case 'automations':
+      return <AutomationsPanel />
     case 'sessions':
       return <SessionsPanel />
   }

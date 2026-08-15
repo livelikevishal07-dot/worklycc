@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Building2, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Building2, FileSignature, Pencil, Plus, Trash2, X } from 'lucide-react'
 
 import { COLOR_OPTIONS, COLOR_TONE, type AccentColor as DepartmentColor } from '@/lib/colors'
 import type { Company } from '@/lib/db/types'
@@ -12,6 +12,13 @@ type Draft = {
   industry: string
   description: string
   color: DepartmentColor
+  // Letterhead — appears on offer and relieving letters issued for this company.
+  address: string
+  email: string
+  phone: string
+  website: string
+  signatoryName: string
+  signatoryDesignation: string
 }
 
 const emptyDraft: Draft = {
@@ -19,6 +26,12 @@ const emptyDraft: Draft = {
   industry: '',
   description: '',
   color: 'violet',
+  address: '',
+  email: '',
+  phone: '',
+  website: '',
+  signatoryName: '',
+  signatoryDesignation: '',
 }
 
 export function CompaniesPanel() {
@@ -59,6 +72,12 @@ export function CompaniesPanel() {
       industry: company.industry ?? '',
       description: company.description ?? '',
       color: colorOrDefault(company.color),
+      address: company.address ?? '',
+      email: company.email ?? '',
+      phone: company.phone ?? '',
+      website: company.website ?? '',
+      signatoryName: company.signatory_name ?? '',
+      signatoryDesignation: company.signatory_designation ?? '',
     })
     setFormOpen(true)
   }
@@ -74,6 +93,12 @@ export function CompaniesPanel() {
         industry: draft.industry.trim() || null,
         description: draft.description.trim() || null,
         color: draft.color,
+        address: draft.address.trim() || null,
+        email: draft.email.trim() || null,
+        phone: draft.phone.trim() || null,
+        website: draft.website.trim() || null,
+        signatory_name: draft.signatoryName.trim() || null,
+        signatory_designation: draft.signatoryDesignation.trim() || null,
       }
       const saved = editing
         ? await request<Company>(`/api/companies/${editing.id}`, {
@@ -182,6 +207,65 @@ export function CompaniesPanel() {
               value={draft.color}
               onChange={(color) => setDraft((d) => ({ ...d, color }))}
             />
+          </div>
+
+          {/* ── Letterhead ── */}
+          <div className="mt-5 border-t border-border pt-4">
+            <div className="mb-3 flex items-center gap-2">
+              <FileSignature className="size-4 text-ink-soft" />
+              <h4 className="text-sm font-semibold">Letterhead</h4>
+              <span className="text-[11px] text-ink-soft">
+                Printed on offer &amp; relieving letters issued for this company
+              </span>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Registered address" className="sm:col-span-2">
+                <textarea
+                  value={draft.address}
+                  onChange={(e) => setDraft((d) => ({ ...d, address: e.target.value }))}
+                  rows={2}
+                  placeholder={'123 MG Road, Indiranagar\nBengaluru, Karnataka 560038'}
+                  className="w-full rounded-lg border border-border bg-surface p-3 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                />
+              </Field>
+              <Field label="Contact email">
+                <Input
+                  type="email"
+                  value={draft.email}
+                  onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))}
+                  placeholder="hr@company.com"
+                />
+              </Field>
+              <Field label="Phone">
+                <Input
+                  value={draft.phone}
+                  onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
+                  placeholder="+91 98765 43210"
+                />
+              </Field>
+              <Field label="Website">
+                <Input
+                  value={draft.website}
+                  onChange={(e) => setDraft((d) => ({ ...d, website: e.target.value }))}
+                  placeholder="www.company.com"
+                />
+              </Field>
+              <Field label="Signatory name">
+                <Input
+                  value={draft.signatoryName}
+                  onChange={(e) => setDraft((d) => ({ ...d, signatoryName: e.target.value }))}
+                  placeholder="Leave blank for “Authorised Signatory”"
+                />
+              </Field>
+              <Field label="Signatory designation" className="sm:col-span-2">
+                <Input
+                  value={draft.signatoryDesignation}
+                  onChange={(e) => setDraft((d) => ({ ...d, signatoryDesignation: e.target.value }))}
+                  placeholder="e.g. Director / HR Manager"
+                />
+              </Field>
+            </div>
           </div>
 
           <div className="mt-5 flex items-center justify-end gap-2">
