@@ -16,6 +16,7 @@ import {
   Wallet,
   X,
   type LucideIcon,
+  BadgeCheck,
 } from 'lucide-react'
 
 import { Avatar }        from '@/components/ui/avatar'

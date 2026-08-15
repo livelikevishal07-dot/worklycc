@@ -7,10 +7,22 @@ import { decryptSecret, encryptSecret } from '@/lib/crypto'
 export type KycStatus = 'invited' | 'submitted' | 'approved' | 'rejected'
 export type LetterKind = 'offer' | 'release'
 
+/**
+ * How the submission was started.
+ *   invite   — one-off link emailed to a named person
+ *   public   — someone opened the shared "general" link
+ *   employee — an existing employee re-filling their own KYC
+ *
+ * This is what stops a re-KYC creating a duplicate employee on approval.
+ */
+export type KycSource = 'invite' | 'public' | 'employee'
+
 export interface KycSubmission {
   id:            string
   token:         string
   status:        KycStatus
+  source:        KycSource
+  link_id:       string | null
 
   invited_name:  string | null
   invited_email: string | null
@@ -57,7 +69,7 @@ export type KycSummary = Omit<KycSubmission, 'aadhaar_enc'> & {
 }
 
 const LIST_SELECT =
-  'id, token, status, invited_name, invited_email, company_id, invited_at, expires_at, sent_at, ' +
+  'id, token, status, source, link_id, invited_name, invited_email, company_id, invited_at, expires_at, sent_at, ' +
   'full_name, email, phone, alt_phone, date_of_birth, address, city, state, pincode, ' +
   'emergency_name, emergency_phone, emergency_relation, designation, aadhaar_last4, ' +
   'photo_path, aadhaar_path, letter_path, letter_kind, submitted_at, reviewed_at, review_note, ' +
@@ -91,6 +103,146 @@ export async function createInvite(input: {
     .single()
   if (error) throw error
   return data as KycSubmission
+}
+
+/* ── Reusable "general" link ──────────────────────────────────────────────── */
+
+export interface KycPublicLink {
+  id:         string
+  token:      string
+  label:      string | null
+  company_id: string | null
+  is_active:  boolean
+  uses:       number
+  created_at: string
+}
+
+export async function listPublicLinks(): Promise<KycPublicLink[]> {
+  const { data, error } = await db()
+    .from('kyc_public_links')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as KycPublicLink[]
+}
+
+export async function createPublicLink(input: {
+  label?: string | null; companyId?: string | null
+}): Promise<KycPublicLink> {
+  const { data, error } = await db()
+    .from('kyc_public_links')
+    .insert({
+      token:      newToken(),
+      label:      input.label?.trim() || null,
+      company_id: input.companyId ?? null,
+    })
+    .select('*')
+    .single()
+  if (error) throw error
+  return data as KycPublicLink
+}
+
+export async function setPublicLinkActive(id: string, active: boolean): Promise<void> {
+  const { error } = await db()
+    .from('kyc_public_links')
+    .update({ is_active: active })
+    .eq('id', id)
+  if (error) throw error
+}
+
+export async function deletePublicLink(id: string): Promise<void> {
+  const { error } = await db().from('kyc_public_links').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function getPublicLinkByToken(token: string): Promise<KycPublicLink | null> {
+  const { data, error } = await db()
+    .from('kyc_public_links')
+    .select('*')
+    .eq('token', token)
+    .maybeSingle()
+  if (error) throw error
+  return (data as KycPublicLink) ?? null
+}
+
+/**
+ * Mint a private submission for someone who opened the shared link, so each
+ * person fills their own form and never sees anyone else's answers.
+ */
+export async function startSubmissionFromLink(link: KycPublicLink): Promise<KycSubmission> {
+  const { data, error } = await db()
+    .from('kyc_submissions')
+    .insert({
+      token:      newToken(),
+      status:     'invited',
+      source:     'public',
+      link_id:    link.id,
+      company_id: link.company_id,
+      expires_at: new Date(Date.now() + INVITE_TTL_DAYS * 86_400_000).toISOString(),
+    })
+    .select('*')
+    .single()
+  if (error) throw error
+
+  // Usage count is informational; a failure here must not lose the submission.
+  try {
+    await db().from('kyc_public_links')
+      .update({ uses: link.uses + 1 })
+      .eq('id', link.id)
+  } catch { /* ignore */ }
+
+  return data as KycSubmission
+}
+
+/* ── Re-KYC for an existing employee ──────────────────────────────────────── */
+
+/**
+ * The employee's own in-flight KYC, creating one if they have none open.
+ * A partial unique index keeps this to one open row per employee.
+ */
+export async function getOrStartEmployeeSubmission(employee: {
+  id: string; full_name: string; email: string | null; company_id: string | null
+}): Promise<KycSubmission> {
+  const { data: existing, error: findErr } = await db()
+    .from('kyc_submissions')
+    .select('*')
+    .eq('employee_id', employee.id)
+    .eq('source', 'employee')
+    .in('status', ['invited', 'submitted'])
+    .maybeSingle()
+  if (findErr) throw findErr
+  if (existing) return existing as KycSubmission
+
+  const { data, error } = await db()
+    .from('kyc_submissions')
+    .insert({
+      token:         newToken(),
+      status:        'invited',
+      source:        'employee',
+      employee_id:   employee.id,
+      invited_name:  employee.full_name,
+      invited_email: employee.email,
+      company_id:    employee.company_id,
+      // No expiry: staff should be able to finish their own KYC in their own time.
+      expires_at:    null,
+    })
+    .select('*')
+    .single()
+  if (error) throw error
+  return data as KycSubmission
+}
+
+/** Most recent finished KYC for an employee, for the "last updated" line. */
+export async function latestEmployeeSubmission(employeeId: string): Promise<KycSubmission | null> {
+  const { data, error } = await db()
+    .from('kyc_submissions')
+    .select('*')
+    .eq('employee_id', employeeId)
+    .eq('source', 'employee')
+    .order('created_at', { ascending: false })
+    .limit(1)
+  if (error) throw error
+  return ((data ?? [])[0] as KycSubmission) ?? null
 }
 
 export async function listSubmissions(status?: KycStatus): Promise<KycSummary[]> {

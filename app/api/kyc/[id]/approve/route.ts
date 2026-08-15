@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { isAdminAuthenticated } from '@/lib/auth-admin'
 import { getSubmission, setStatus } from '@/lib/db/kyc'
-import { createEmployee } from '@/lib/db/employees'
+import { createEmployee, updateEmployee } from '@/lib/db/employees'
 import { fail, fromError, ok } from '@/lib/http'
 
 export const runtime = 'nodejs'
@@ -37,7 +37,7 @@ export async function POST(
 
     const sub = await getSubmission(params.id)
     if (!sub) return fail(404, 'KYC submission not found')
-    if (sub.status === 'approved' && sub.employee_id) {
+    if (sub.status === 'approved' && sub.employee_id && sub.source !== 'employee') {
       return fail(409, 'This submission has already been added to the employee list.')
     }
     if (sub.status !== 'submitted' && sub.status !== 'rejected') {
@@ -54,12 +54,38 @@ export async function POST(
       .filter(Boolean)
       .join(', ') || null
 
+    // Personal details always come from what the person filled in.
+    const personal = {
+      full_name: sub.full_name,
+      email:     sub.email,
+      phone:     sub.phone,
+      address:   addressLine,
+      birthday:  sub.date_of_birth,
+    }
+
+    // A re-KYC belongs to somebody who already exists — updating their record is
+    // the whole point, and creating a second row would duplicate them.
+    if (sub.source === 'employee' && sub.employee_id) {
+      const employee = await updateEmployee(sub.employee_id, {
+        ...personal,
+        // Employment terms are only touched when explicitly supplied, so
+        // approving a details refresh can't silently wipe someone's salary.
+        ...(input.role_id       !== undefined ? { role_id: input.role_id }             : {}),
+        ...(input.department_id !== undefined ? { department_id: input.department_id } : {}),
+        ...(input.company_id    !== undefined ? { company_id: input.company_id }       : {}),
+        ...(input.joining_date  !== undefined ? { joining_date: input.joining_date }   : {}),
+        ...(input.monthly_salary !== undefined ? { monthly_salary: input.monthly_salary } : {}),
+        ...(input.username ? { username: input.username } : {}),
+        ...(input.password ? { password: input.password } : {}),
+      })
+
+      await setStatus(params.id, 'approved', null, employee.id)
+      return ok({ employee, submissionId: params.id, updated: true })
+    }
+
     const employee = await createEmployee({
+      ...personal,
       full_name:     sub.full_name,
-      email:         sub.email,
-      phone:         sub.phone,
-      address:       addressLine,
-      birthday:      sub.date_of_birth,
       joining_date:  input.joining_date ?? null,
       role_id:       input.role_id ?? null,
       department_id: input.department_id ?? null,
@@ -74,7 +100,7 @@ export async function POST(
 
     await setStatus(params.id, 'approved', null, employee.id)
 
-    return ok({ employee, submissionId: params.id }, { status: 201 })
+    return ok({ employee, submissionId: params.id, updated: false }, { status: 201 })
   } catch (err) {
     return fromError(err)
   }
