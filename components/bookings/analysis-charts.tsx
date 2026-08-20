@@ -13,6 +13,7 @@ import {
 import * as React from 'react'
 import type { Booking } from './analysis-utils'
 import { fmt, toISO, diffDays, parseISO } from './analysis-utils'
+import { useReveal } from './reveal-context'
 
 const MONTHS = [
   'January','February','March','April','May','June',
@@ -32,6 +33,7 @@ const OCCASION_COLORS = [
 ]
 
 function ChartTip({ active, payload, label }: any) {
+  const { revealed } = useReveal()
   if (!active || !payload?.length) return null
   return (
     <div className="rounded-xl border border-border bg-surface p-3 text-xs shadow-pop">
@@ -40,7 +42,7 @@ function ChartTip({ active, payload, label }: any) {
         <div key={i} className="flex items-center gap-2">
           <span className="size-2 rounded-full" style={{ background: p.color }} />
           <span className="text-ink-soft">{p.name}:</span>
-          <span className="font-semibold">₹{fmt(Number(p.value))}</span>
+          <span className="font-semibold">{revealed ? `₹${fmt(Number(p.value))}` : "••••••"}</span>
         </div>
       ))}
     </div>
@@ -48,6 +50,7 @@ function ChartTip({ active, payload, label }: any) {
 }
 
 export function TrendChart({ bookings, from, to }: { bookings: Booking[]; from: string; to: string }) {
+  const { revealed } = useReveal()
   const days = diffDays(from, to)
   const useMonthly = days > 62
 
@@ -127,7 +130,7 @@ export function TrendChart({ bookings, from, to }: { bookings: Booking[]; from: 
             />
             <YAxis axisLine={false} tickLine={false}
               tick={{ fontSize: 11, fill: 'hsl(var(--ink-soft))' }}
-              tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
+              tickFormatter={v => revealed ? (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)) : "•••"}
             />
             <Tooltip content={<ChartTip />} />
             <Area type="monotone" dataKey="advance" name="Advance"
@@ -144,6 +147,7 @@ export function TrendChart({ bookings, from, to }: { bookings: Booking[]; from: 
 // ── Website Revenue ───────────────────────────────────────────────────────────
 
 export function WebsiteChart({ bookings }: { bookings: Booking[] }) {
+  const { revealed } = useReveal()
   const sites = ['BalloonDekor', '7eventzz', 'Giftlaya']
   const data = sites.map(site => ({
     name: site,
@@ -163,7 +167,7 @@ export function WebsiteChart({ bookings }: { bookings: Booking[] }) {
               tick={{ fontSize: 11, fill: 'hsl(var(--ink-soft))' }} />
             <YAxis axisLine={false} tickLine={false}
               tick={{ fontSize: 11, fill: 'hsl(var(--ink-soft))' }}
-              tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
+              tickFormatter={v => revealed ? (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)) : "•••"} />
             <Tooltip content={<ChartTip />} />
             <Bar dataKey="Revenue" radius={[6, 6, 0, 0]} maxBarSize={56}>
               {data.map(d => (

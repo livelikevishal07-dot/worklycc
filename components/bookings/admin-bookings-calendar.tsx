@@ -6,6 +6,8 @@ import {
   PencilLine, Phone, RefreshCcw, User, Wallet, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useRevealSafe } from './reveal-context'
+import { RevealToggle } from './reveal-toggle'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -65,6 +67,9 @@ function fmtINR(n: number) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export function AdminBookingsCalendar({ employees, hideAmounts = false }: Props) {
+  const { revealed, inScope } = useRevealSafe()
+  // Employee portal keeps its own hideAmounts prop; the CMS adds the passcode lock.
+  const hideMoney = hideAmounts || !revealed
   const now = new Date()
   const [year,  setYear]  = React.useState(now.getFullYear())
   const [month, setMonth] = React.useState(now.getMonth())
@@ -265,10 +270,11 @@ export function AdminBookingsCalendar({ employees, hideAmounts = false }: Props)
               <p className="truncate text-[11px] text-ink-soft sm:text-xs">
                 {loading
                   ? 'Loading…'
-                  : `${totalOrders} order${totalOrders !== 1 ? 's' : ''}${hideAmounts ? '' : ` · ${fmtINR(totalRevenue)}`}${peakDay.count > 0 ? ` · peak ${peakDay.count} on ${new Date(peakDay.date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}`
+                  : `${totalOrders} order${totalOrders !== 1 ? 's' : ''}${hideMoney ? '' : ` · ${fmtINR(totalRevenue)}`}${peakDay.count > 0 ? ` · peak ${peakDay.count} on ${new Date(peakDay.date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}`
                 }
               </p>
             </div>
+            {inScope && <RevealToggle className="shrink-0" />}
             {loading && <Loader2 className="size-4 shrink-0 animate-spin text-brand" />}
           </div>
 
@@ -355,7 +361,7 @@ export function AdminBookingsCalendar({ employees, hideAmounts = false }: Props)
                     <p className="truncate text-ink-muted">
                       {count} order{count !== 1 ? 's' : ''}
                     </p>
-                    {!hideAmounts && (
+                    {!hideMoney && (
                       <p className="truncate font-medium text-ink-soft">{fmtINR(revenue)}</p>
                     )}
                   </div>
@@ -380,7 +386,7 @@ export function AdminBookingsCalendar({ employees, hideAmounts = false }: Props)
           <p className="mt-1 text-xs text-ink-soft">
             {selectedBookings.length === 0
               ? 'No orders scheduled'
-              : `${selectedBookings.length} order${selectedBookings.length !== 1 ? 's' : ''}${hideAmounts ? '' : ` · ${fmtINR(selectedRevenue)}`}`}
+              : `${selectedBookings.length} order${selectedBookings.length !== 1 ? 's' : ''}${hideMoney ? '' : ` · ${fmtINR(selectedRevenue)}`}`}
           </p>
         </div>
 
@@ -482,7 +488,7 @@ export function AdminBookingsCalendar({ employees, hideAmounts = false }: Props)
                       )}
                     </div>
 
-                    {!hideAmounts && (
+                    {!hideMoney && (
                       <div className="flex items-center justify-between rounded-lg bg-surface-2/40 px-3 py-2 text-[11px]">
                         <div className="flex items-center gap-1.5 text-ink-soft">
                           <Wallet className="size-3" /> Total

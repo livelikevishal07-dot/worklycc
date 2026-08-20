@@ -6,6 +6,8 @@ import {
   TrendingUp, CalendarRange,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useReveal, maskedINR } from './reveal-context'
+import { RevealToggle } from './reveal-toggle'
 import dynamic from 'next/dynamic'
 import { fmt, toISO, diffDays } from './analysis-utils'
 import type { Booking } from './analysis-utils'
@@ -69,6 +71,7 @@ function StatCard({
 // ── Platform Breakdown ────────────────────────────────────────────────────────
 
 function PlatformChart({ bookings }: { bookings: Booking[] }) {
+  const { revealed } = useReveal()
   const platforms = ['WhatsApp', 'Website', 'Others']
   const total = bookings.length || 1
   const data = platforms.map(p => ({
@@ -91,7 +94,7 @@ function PlatformChart({ bookings }: { bookings: Booking[] }) {
                 <span className="text-sm font-medium">{d.name}</span>
               </div>
               <div className="flex items-center gap-2.5">
-                <span className="text-xs text-ink-soft">₹{fmt(d.revenue)}</span>
+                <span className="text-xs text-ink-soft">{maskedINR(d.revenue, revealed)}</span>
                 <span className="text-sm font-bold">{d.count}
                   <span className="ml-1 text-xs font-normal text-ink-soft">
                     ({Math.round((d.count / total) * 100)}%)
@@ -113,6 +116,7 @@ function PlatformChart({ bookings }: { bookings: Booking[] }) {
 // ── Employee Leaderboard ──────────────────────────────────────────────────────
 
 function EmployeeLeaderboard({ bookings }: { bookings: Booking[] }) {
+  const { revealed } = useReveal()
   const map = new Map<string, { name: string; count: number; revenue: number }>()
   bookings.forEach(b => {
     const name = b.employee?.full_name ?? 'Unknown'
@@ -145,7 +149,7 @@ function EmployeeLeaderboard({ bookings }: { bookings: Booking[] }) {
                   <span className="truncate text-sm font-medium">{r.name}</span>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-xs text-ink-soft">₹{fmt(r.revenue)}</span>
+                  <span className="text-xs text-ink-soft">{maskedINR(r.revenue, revealed)}</span>
                   <span className="text-sm font-bold">{r.count}
                     <span className="ml-1 text-xs font-normal text-ink-soft">entries</span>
                   </span>
@@ -203,6 +207,7 @@ function computeRange(mode: RangeMode, customFrom: string, customTo: string): { 
 }
 
 export function AdminBookingsAnalysis({ employees }: Props) {
+  const { revealed } = useReveal()
   const [rangeMode, setRangeMode] = React.useState<RangeMode>('month')
   const [customFrom, setCustomFrom] = React.useState(todayISO())
   const [customTo, setCustomTo]   = React.useState(todayISO())
@@ -310,6 +315,8 @@ export function AdminBookingsAnalysis({ employees }: Props) {
         {loading && (
           <span className="text-xs text-ink-soft animate-pulse">Loading…</span>
         )}
+
+        <RevealToggle className="ml-auto" />
       </div>
 
       {/* KPI Cards */}
@@ -320,12 +327,12 @@ export function AdminBookingsAnalysis({ employees }: Props) {
           bgCls="bg-brand/10" textCls="text-brand" icon={BookOpen}
         />
         <StatCard
-          label="Total Revenue" value={`₹${fmt(totalRevenue)}`}
+          label="Total Revenue" value={maskedINR(totalRevenue, revealed)}
           sub="all orders combined"
           bgCls="bg-violet/10" textCls="text-violet" icon={IndianRupee}
         />
         <StatCard
-          label="Avg Order Value" value={`₹${fmt(avgOrderValue)}`}
+          label="Avg Order Value" value={maskedINR(avgOrderValue, revealed)}
           sub={`across ${fmt(totalBookings)} order${totalBookings === 1 ? '' : 's'}`}
           bgCls="bg-amber/10" textCls="text-amber" icon={TrendingUp}
         />
@@ -335,12 +342,12 @@ export function AdminBookingsAnalysis({ employees }: Props) {
           bgCls="bg-sky/10" textCls="text-sky" icon={CalendarRange}
         />
         <StatCard
-          label="Advance Collected" value={`₹${fmt(totalAdvance)}`}
-          sub={`${totalRevenue ? Math.round((totalAdvance / totalRevenue) * 100) : 0}% collected`}
+          label="Advance Collected" value={maskedINR(totalAdvance, revealed)}
+          sub={revealed ? `${totalRevenue ? Math.round((totalAdvance / totalRevenue) * 100) : 0}% collected` : "collected"}
           bgCls="bg-emerald/10" textCls="text-emerald" icon={Wallet}
         />
         <StatCard
-          label="Balance Pending" value={`₹${fmt(totalPending)}`}
+          label="Balance Pending" value={maskedINR(totalPending, revealed)}
           sub="yet to collect"
           bgCls="bg-coral/10" textCls="text-coral" icon={Clock}
         />

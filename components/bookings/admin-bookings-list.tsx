@@ -7,6 +7,8 @@ import {
   Pencil, Loader2, Check,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useReveal, maskedINR, MASK } from './reveal-context'
+import { RevealToggle } from './reveal-toggle'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -124,6 +126,7 @@ type SortDir = 'asc' | 'desc'
 // ── Main List Component ───────────────────────────────────────────────────────
 
 export function AdminBookingsList({ employees }: Props) {
+  const { revealed } = useReveal()
   // ── Dynamic booking options ─────────────────────────────────────────────────
   const [websites,  setWebsites]  = React.useState<string[]>(FALLBACK_WEBSITES)
   const [platforms, setPlatforms] = React.useState<string[]>(FALLBACK_PLATFORMS)
@@ -297,7 +300,9 @@ export function AdminBookingsList({ employees }: Props) {
     const rows = filtered.map(b => [
       b.order_date, b.customer_name, b.customer_phone, b.city, b.event_date,
       b.website, b.occasion, b.booking_platform,
-      b.total_amount, b.advance_paid, b.total_amount - b.advance_paid,
+      ...(revealed
+        ? [b.total_amount, b.advance_paid, b.total_amount - b.advance_paid]
+        : [MASK, MASK, MASK]),
       b.employee?.full_name ?? '',
     ])
     const csv = [headers, ...rows]
@@ -350,6 +355,7 @@ export function AdminBookingsList({ employees }: Props) {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
+            <RevealToggle />
             {activeFilterCount > 0 && (
               <button onClick={clearAllFilters}
                 className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-ink-muted hover:bg-surface-2 transition-colors">
@@ -414,9 +420,9 @@ export function AdminBookingsList({ employees }: Props) {
       {/* ── Stats strip ── */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <MiniStat label="Bookings" value={String(totalCount)} color="text-brand" />
-        <MiniStat label="Total Revenue" value={`₹${fmt(totalRevenue)}`} color="text-violet" />
-        <MiniStat label="Advance" value={`₹${fmt(totalAdvance)}`} color="text-emerald" />
-        <MiniStat label="Pending" value={`₹${fmt(totalPending)}`} color="text-coral" />
+        <MiniStat label="Total Revenue" value={maskedINR(totalRevenue, revealed)} color="text-violet" />
+        <MiniStat label="Advance" value={maskedINR(totalAdvance, revealed)} color="text-emerald" />
+        <MiniStat label="Pending" value={maskedINR(totalPending, revealed)} color="text-coral" />
       </div>
 
       {/* ── Table ── */}
@@ -478,13 +484,13 @@ export function AdminBookingsList({ employees }: Props) {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right font-semibold whitespace-nowrap">
-                      ₹{fmt(b.total_amount)}
+                      {revealed ? `₹${fmt(b.total_amount)}` : MASK}
                     </td>
                     <td className="px-4 py-3 text-right text-xs font-medium whitespace-nowrap" style={{ color: '#22C58B' }}>
-                      ₹{fmt(b.advance_paid)}
+                      {revealed ? `₹${fmt(b.advance_paid)}` : MASK}
                     </td>
                     <td className="px-4 py-3 text-right text-xs font-medium whitespace-nowrap" style={{ color: '#F47A6F' }}>
-                      ₹{fmt(pending)}
+                      {revealed ? `₹${fmt(pending)}` : MASK}
                     </td>
                     <td className="px-4 py-3 text-xs text-ink-soft whitespace-nowrap">
                       {b.employee?.full_name ?? '—'}
@@ -600,6 +606,10 @@ function EditBookingModal({
   websites:  string[]
   platforms: string[]
 }) {
+  // Amounts stay in `form` so saving preserves them untouched while locked —
+  // only their display and editability are gated.
+  const { revealed } = useReveal()
+
   // If the stored city is not in the standard list, default to "Other City" mode
   const isOtherCity = !CITY_SET.has(booking.city)
 
@@ -755,12 +765,22 @@ function EditBookingModal({
                 onChange={e => set('event_date', e.target.value)} className={inputCls} required />
             </Field>
             <Field label="Total Amount (₹)">
-              <input type="number" min="0" value={form.total_amount}
-                onChange={e => set('total_amount', e.target.value)} className={inputCls} required />
+              {revealed ? (
+                <input type="number" min="0" value={form.total_amount}
+                  onChange={e => set('total_amount', e.target.value)} className={inputCls} required />
+              ) : (
+                <input type="text" value={MASK} disabled readOnly className={inputCls + ' opacity-60 cursor-not-allowed'}
+                  title="Unlock amounts to edit this" />
+              )}
             </Field>
             <Field label="Advance Paid (₹)">
-              <input type="number" min="0" value={form.advance_paid}
-                onChange={e => set('advance_paid', e.target.value)} className={inputCls} required />
+              {revealed ? (
+                <input type="number" min="0" value={form.advance_paid}
+                  onChange={e => set('advance_paid', e.target.value)} className={inputCls} required />
+              ) : (
+                <input type="text" value={MASK} disabled readOnly className={inputCls + ' opacity-60 cursor-not-allowed'}
+                  title="Unlock amounts to edit this" />
+              )}
             </Field>
           </div>
 
