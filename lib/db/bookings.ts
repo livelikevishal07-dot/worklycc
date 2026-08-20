@@ -16,6 +16,7 @@ export interface Booking {
   website:          string
   occasion:         string
   booking_platform: string
+  external_order_id: string | null   // source site order no; NULL when typed in by hand
   created_at:       string
 }
 
@@ -126,6 +127,7 @@ export async function createBooking(input: {
   website:          string
   occasion:         string
   booking_platform: string
+  external_order_id?: string | null
 }): Promise<Booking> {
   const { data, error } = await db()
     .from('bookings')
@@ -134,6 +136,25 @@ export async function createBooking(input: {
     .single()
   if (error) throw error
   return normalize(data as Booking)
+}
+
+/**
+ * Look up a booking already imported from a website, by that site's own order
+ * number. Lets the external endpoint answer a retry with the original row
+ * instead of inserting a duplicate.
+ */
+export async function getBookingByExternalId(
+  website: string,
+  external_order_id: string,
+): Promise<Booking | null> {
+  const { data, error } = await db()
+    .from('bookings')
+    .select('*')
+    .eq('website', website)
+    .eq('external_order_id', external_order_id)
+    .maybeSingle()
+  if (error) throw error
+  return data ? normalize(data as Booking) : null
 }
 
 export async function updateBooking(
