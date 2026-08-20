@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
+import { headers } from 'next/headers'
 
 import { ThemeProvider } from '@/components/theme-provider'
 import './globals.css'
@@ -44,6 +45,12 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  // next-themes writes an inline script into <head> that sets the theme class
+  // before first paint. Under the nonce-based CSP that script is blocked unless
+  // it carries the nonce, and a blocked one means the page flashes the wrong
+  // theme on every load. The nonce is minted per request in middleware.ts.
+  const nonce = headers().get('x-nonce') ?? undefined
+
   return (
     <html lang="en" suppressHydrationWarning className={inter.variable}>
       <head>
@@ -59,6 +66,7 @@ export default function RootLayout({
           defaultTheme="light"
           enableSystem={false}
           disableTransitionOnChange
+          nonce={nonce}
         >
           {children}
         </ThemeProvider>

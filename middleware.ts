@@ -8,7 +8,9 @@ const SESSION_SEP     = '.'
 
 // ── Edge-compatible HMAC verify ───────────────────────────────────────────────
 // Mirrors the node:crypto signing in lib/auth-admin.ts / lib/auth.ts using the
-// Web Crypto API, which is what the Edge runtime provides.
+// Web Crypto API, which is what the Edge runtime provides. If you change this,
+// re-check that both produce identical signatures — a mismatch locks out every
+// employee and the admin, and does it silently.
 
 async function hmacBase64Url(secretVal: string, payload: string): Promise<string> {
   const enc = new TextEncoder()
@@ -68,14 +70,61 @@ async function verifyEmployeeToken(token: string): Promise<boolean> {
   }
 }
 
+// ── Content Security Policy ───────────────────────────────────────────────────
+//
+// Nonce-based, regenerated per request. Next.js reads the nonce out of the CSP
+// header we set on the *request* and stamps it onto its own <script> tags, so
+// its hydration scripts run while an injected one does not.
+//
+// `strict-dynamic` means the browser ignores host allowlists for scripts and
+// trusts only the nonce plus whatever the nonced bootstrap loads. That is the
+// whole point: an attacker who manages to inject a <script> into a page cannot
+// guess the nonce, so it never executes. This app has no inline scripts of its
+// own and no next/script, which is what makes it practical here.
+//
+// Where it is deliberately loose:
+// - style-src 'unsafe-inline' — React style={{…}} attributes and Next's own
+//   injected styles. Nonces cannot cover style attributes, and CSS injection is
+//   a far smaller problem than script injection.
+// - img-src https: — the mail client renders real emails, which reference
+//   images on arbitrary hosts. Locking this down would break every newsletter
+//   in the inbox to prevent a threat images do not really pose. Employee
+//   avatars and KYC scans come from Supabase Storage over https too.
+// - 'unsafe-eval' in development only — the dev server's HMR needs it.
+
+function buildCsp(nonce: string): string {
+  const dev = process.env.NODE_ENV === 'development'
+  return [
+    `default-src 'self'`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ''}`,
+    `style-src 'self' 'unsafe-inline'`,
+    `img-src 'self' data: blob: https:`,
+    `font-src 'self' data:`,
+    `connect-src 'self' https://*.supabase.co`,
+    // The mail client shows message bodies in a sandbox="" srcDoc iframe, and
+    // letter previews render generated PDFs from blob: URLs.
+    `frame-src 'self' blob: data:`,
+    `worker-src 'self' blob:`,          // push notifications register /sw.js
+    `manifest-src 'self'`,              // PWA manifest
+    `base-uri 'self'`,                  // stop <base> rewriting relative URLs
+    `form-action 'self'`,               // logins cannot be posted to another host
+    `frame-ancestors 'self'`,           // clickjacking, and it outranks X-Frame-Options
+    `object-src 'none'`,                // no Flash/Java/embed vectors
+    `upgrade-insecure-requests`,
+  ].join('; ')
+}
+
+function makeNonce(): string {
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  return btoa(String.fromCharCode(...bytes))
+}
+
 // ── API route classification ──────────────────────────────────────────────────
 //
-// Until now only /cms pages were guarded, which left ~50 API routes reachable by
-// anyone on the internet — /api/employees, /api/payroll, /api/reports and the
-// rest returned live data with no session at all. The guard below is DEFAULT
-// DENY: anything under /api that isn't explicitly listed as public requires an
-// admin session, so a route added later is protected before anyone remembers to
-// protect it.
+// DEFAULT DENY: anything under /api that isn't explicitly listed as public
+// requires an admin session, so a route added later is protected before anyone
+// remembers to protect it.
 
 /** Genuinely public — these carry their own auth or are the login endpoints. */
 const PUBLIC_API_EXACT = new Set([
@@ -122,21 +171,21 @@ function matchesPrefix(pathname: string, prefixes: string[]): boolean {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
-
   const isApi = pathname.startsWith('/api/')
-  const isCms = pathname === '/cms' || pathname.startsWith('/cms/')
-  if (!isApi && !isCms) return NextResponse.next()
 
+  // ── API: auth only. A CSP on a JSON response protects nothing. ─────────────
   if (isApi) {
     if (PUBLIC_API_EXACT.has(pathname)) return NextResponse.next()
     if (matchesPrefix(pathname, PUBLIC_API_PREFIX)) return NextResponse.next()
 
-    const adminOk = await verifyAdminToken(req.cookies.get(ADMIN_COOKIE)?.value ?? '')
-    if (adminOk) return NextResponse.next()
+    if (await verifyAdminToken(req.cookies.get(ADMIN_COOKIE)?.value ?? '')) {
+      return NextResponse.next()
+    }
 
     if (matchesPrefix(pathname, EMPLOYEE_API_PREFIX)) {
-      const employeeOk = await verifyEmployeeToken(req.cookies.get(EMPLOYEE_COOKIE)?.value ?? '')
-      if (employeeOk) return NextResponse.next()
+      if (await verifyEmployeeToken(req.cookies.get(EMPLOYEE_COOKIE)?.value ?? '')) {
+        return NextResponse.next()
+      }
     }
 
     // JSON, not a redirect — the caller is fetch(), not a browser navigation.
@@ -146,17 +195,38 @@ export async function middleware(req: NextRequest) {
     })
   }
 
-  // CMS pages: redirect to the login form, preserving the requested path.
-  if (!(await verifyAdminToken(req.cookies.get(ADMIN_COOKIE)?.value ?? ''))) {
+  // ── Pages: CSP for all of them, plus the admin gate on /cms ────────────────
+  const nonce = makeNonce()
+  const csp   = buildCsp(nonce)
+
+  const isCms = pathname === '/cms' || pathname.startsWith('/cms/')
+  if (isCms && !(await verifyAdminToken(req.cookies.get(ADMIN_COOKIE)?.value ?? ''))) {
     const loginUrl    = req.nextUrl.clone()
     loginUrl.pathname = '/admin-login'
     loginUrl.search   = `?from=${encodeURIComponent(pathname)}`
     return NextResponse.redirect(loginUrl)
   }
 
-  return NextResponse.next()
+  // Next.js parses the nonce out of the CSP header on the REQUEST to stamp its
+  // own script tags; the header on the RESPONSE is what the browser enforces.
+  // Both are required — setting only one silently produces a page whose scripts
+  // are all blocked.
+  const requestHeaders = new Headers(req.headers)
+  requestHeaders.set('x-nonce', nonce)
+  requestHeaders.set('Content-Security-Policy', csp)
+
+  const res = NextResponse.next({ request: { headers: requestHeaders } })
+  res.headers.set('Content-Security-Policy', csp)
+  return res
 }
 
 export const config = {
-  matcher: ['/cms', '/cms/:path*', '/api/:path*'],
+  matcher: [
+    /*
+     * Everything except static assets, which need no CSP and would only pay the
+     * middleware round trip. Kept broad on purpose: the CSP has to reach the
+     * employee portal, the login screens and the public KYC forms, not just /cms.
+     */
+    '/((?!_next/static|_next/image|favicon.ico|icon.svg|sw.js|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|json)$).*)',
+  ],
 }
