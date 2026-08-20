@@ -1,5 +1,6 @@
 import 'server-only'
 import { db } from './supabase'
+import { computeScores } from './scoring'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -86,83 +87,24 @@ export async function getLeaderboard(
       .lte('date', end),
   ])
 
-  // ── Build per-employee accumulator maps ─────────────────────────────────────
+  // ── Score ───────────────────────────────────────────────────────────────────
+  // The formula lives in ./scoring so this and /cms/performance stay identical.
 
-  type AttAcc  = { present: number; late: number; eligible: number }
-  type TaskAcc = { done: number; onTime: number; withDeadline: number }
-
-  const attMap  = new Map<string, AttAcc>()
-  const taskMap = new Map<string, TaskAcc>()
-  const recMap  = new Map<string, number>()
-
-  for (const e of employees as { id: string }[]) {
-    attMap.set(e.id,  { present: 0, late: 0, eligible: 0 })
-    taskMap.set(e.id, { done: 0, onTime: 0, withDeadline: 0 })
-    recMap.set(e.id,  0)
-  }
-
-  for (const r of attRes.data ?? []) {
-    const m = attMap.get(r.employee_id)
-    if (!m) continue
-    if (r.status === 'present') { m.present++; m.eligible++ }
-    else if (r.status === 'late')   { m.late++;    m.eligible++ }
-    else if (r.status === 'absent') {              m.eligible++ }
-    // leave / holiday → not counted as an eligible working day
-  }
-
-  for (const r of taskRes.data ?? []) {
-    const m = taskMap.get(r.employee_id)
-    if (!m) continue
-    m.done++
-    const taskRow  = (r.task as unknown as { deadline: string | null } | { deadline: string | null }[] | null)
-    const deadline = Array.isArray(taskRow) ? taskRow[0]?.deadline ?? null : taskRow?.deadline ?? null
-    if (deadline) {
-      m.withDeadline++
-      if (r.completed_at && new Date(r.completed_at) <= new Date(deadline)) m.onTime++
-    }
-  }
-
-  for (const r of recRes.data ?? []) {
-    recMap.set(r.employee_id, (recMap.get(r.employee_id) ?? 0) + 1)
-  }
-
-  // ── Compute raw metrics ─────────────────────────────────────────────────────
-
-  const raw = (employees as { id: string }[]).map((emp) => {
-    const att = attMap.get(emp.id)!
-    const tk  = taskMap.get(emp.id)!
-    const rec = recMap.get(emp.id) ?? 0
-
-    // Attendance: present=100%, late=70%, absent=0%
-    const attendancePct = att.eligible === 0
-      ? 0
-      : Math.min(100, Math.round(((att.present + att.late * 0.7) / att.eligible) * 100))
-
-    // Deadline hit rate: if no deadlined tasks completed, give neutral/perfect score
-    const deadlineHitRate = tk.withDeadline === 0
-      ? (tk.done === 0 ? 50 : 100) // no tasks = neutral; tasks without deadlines = perfect
-      : Math.round((tk.onTime / tk.withDeadline) * 100)
-
-    return { id: emp.id, attendancePct, deadlineHitRate, tasksDone: tk.done, recurringDone: rec }
-  })
-
-  // ── Normalize productivity metrics (tasks + recurring) relative to group max
-
-  const maxTasks = Math.max(...raw.map((r) => r.tasksDone), 1)
-  const maxRec   = Math.max(...raw.map((r) => r.recurringDone), 1)
-
-  // ── Composite score ─────────────────────────────────────────────────────────
-  // Weights: attendance 40% | deadline hit rate 25% | tasks done 20% | recurring 15%
-
-  const scored = raw.map((r) => ({
-    ...r,
-    score: Math.round(
-      r.attendancePct                        * 0.40 +
-      r.deadlineHitRate                      * 0.25 +
-      (r.tasksDone    / maxTasks) * 100      * 0.20 +
-      (r.recurringDone / maxRec)  * 100      * 0.15
-    ),
-  }))
+  const scored = computeScores(
+    ids,
+    (attRes.data ?? []) as { employee_id: string; status: string }[],
+    (taskRes.data ?? []).map((r: any) => {
+      // PostgREST returns the embedded task as an object or a one-element array
+      // depending on the relationship it infers — normalise both shapes.
+      const t = Array.isArray(r.task) ? r.task[0] : r.task
+      return {
+        employee_id:  r.employee_id,
+        completed_at: r.completed_at,
+        deadline:     t?.deadline ?? null,
+      }
+    }),
+    (recRes.data ?? []) as { employee_id: string }[],
+  )
 
   // Sort descending
   scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))

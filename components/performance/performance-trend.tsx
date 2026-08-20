@@ -2,6 +2,8 @@
 
 import dynamic from 'next/dynamic'
 
+import type { TrendPoint } from '@/lib/db/performance'
+
 /**
  * Loads the recharts implementation only once this page is on screen.
  *
@@ -11,7 +13,7 @@ import dynamic from 'next/dynamic'
  * here: the chart is decorative, sits behind the admin login, and recharts
  * measures the DOM to size itself, so it renders on the client regardless.
  */
-export const PerformanceTrend = dynamic(
+export const PerformanceTrend = dynamic<{ data: TrendPoint[] }>(
   () => import('./performance-trend.chart').then((m) => m.PerformanceTrend),
   {
     ssr: false,

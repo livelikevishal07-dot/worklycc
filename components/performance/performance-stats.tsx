@@ -1,6 +1,6 @@
 import { TrendingUp, Crown, Sparkles, ClipboardList } from 'lucide-react'
 
-import { PERFORMANCE_STATS } from '@/lib/mock-data'
+import type { PerformanceOverview } from '@/lib/db/performance'
 import { cn } from '@/lib/utils'
 
 const ACCENT_BG = {
@@ -22,11 +22,11 @@ function Card({ label, value, hint, icon: Icon, accent }: CardProps) {
   return (
     <div className="rounded-2xl border border-border bg-surface p-5 shadow-card">
       <div className="flex items-start justify-between">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm text-ink-muted">{label}</p>
-          <p className="mt-2 text-2xl font-semibold tracking-tight">{value}</p>
+          <p className="mt-2 truncate text-2xl font-semibold tracking-tight">{value}</p>
         </div>
-        <span className={cn('grid size-10 place-items-center rounded-xl', ACCENT_BG[accent])}>
+        <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl', ACCENT_BG[accent])}>
           <Icon className="size-5" />
         </span>
       </div>
@@ -35,13 +35,48 @@ function Card({ label, value, hint, icon: Icon, accent }: CardProps) {
   )
 }
 
-export function PerformanceStats() {
+export function PerformanceStats({ data }: { data: PerformanceOverview }) {
+  const { avgScore, topPerformer, delta, tasksThisMonth, periodLabel } = data
+
+  // Every value here is either measured or shown as "—". Nothing is invented:
+  // an empty month should look empty rather than plausible.
+  const deltaLabel =
+    delta === null ? '—' : `${delta > 0 ? '+' : delta < 0 ? '−' : ''}${Math.abs(delta)}%`
+
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <Card label="Average score" value={`${PERFORMANCE_STATS.avgScore}%`} hint="All employees, this quarter" icon={TrendingUp} accent="violet" />
-      <Card label="Top performer" value={PERFORMANCE_STATS.topPerformer} hint="94% — Sales" icon={Crown} accent="amber" />
-      <Card label="Improvement" value={`+${PERFORMANCE_STATS.improvement}%`} hint="vs last quarter" icon={Sparkles} accent="emerald" />
-      <Card label="Reviews due" value={PERFORMANCE_STATS.reviewsDue} hint="This week" icon={ClipboardList} accent="sky" />
+      <Card
+        label="Average score"
+        value={avgScore === null ? '—' : `${avgScore}%`}
+        hint={avgScore === null ? 'No attendance or task data yet' : `All employees · ${periodLabel}`}
+        icon={TrendingUp}
+        accent="violet"
+      />
+      <Card
+        label="Top performer"
+        value={topPerformer?.name ?? '—'}
+        hint={
+          topPerformer
+            ? `${topPerformer.score}%${topPerformer.department ? ` — ${topPerformer.department}` : ''}`
+            : 'Nobody scored this month'
+        }
+        icon={Crown}
+        accent="amber"
+      />
+      <Card
+        label="Change"
+        value={deltaLabel}
+        hint={delta === null ? 'No previous month to compare' : 'vs last month'}
+        icon={Sparkles}
+        accent={delta !== null && delta < 0 ? 'amber' : 'emerald'}
+      />
+      <Card
+        label="Tasks completed"
+        value={tasksThisMonth}
+        hint={periodLabel}
+        icon={ClipboardList}
+        accent="sky"
+      />
     </div>
   )
 }
