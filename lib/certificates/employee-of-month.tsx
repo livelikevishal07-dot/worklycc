@@ -1,21 +1,48 @@
 import 'server-only'
 import React from 'react'
+import path from 'node:path'
+import fs from 'node:fs'
 import {
-  Document, Page, Text, View, StyleSheet, Svg, Path, Circle, Polygon, renderToBuffer,
+  Document, Page, Text, View, StyleSheet, Svg, Path, Circle, Polygon, Font, renderToBuffer,
 } from '@react-pdf/renderer'
 
 /**
  * Employee of the Month certificate — landscape, navy and gold, matching the
  * template the admin supplied: wave banding top-left and bottom-right, a gold
- * rosette, the recipient's name large and script-like, and a signatory line.
- *
- * The name uses Times-BoldItalic. A true script face would mean registering and
- * bundling a font file into the serverless deploy; of the base-14 fonts this is
- * the closest to the template without shipping binaries for one document.
+ * rosette, the recipient's name in script, and a signatory line.
  *
  * Per the admin: signed "Vishal Gupta", with no blank signature gap — these are
  * issued digitally, so a ruled line waiting for ink would be wrong.
  */
+
+/**
+ * Great Vibes, for the recipient's name — the script face on the template.
+ * SIL Open Font License 1.1; the licence ships beside the file in ./fonts.
+ *
+ * Registered by local path. react-pdf's `src` must be a string — it probes it
+ * with `substring`, so a Buffer throws — and a remote URL would make every
+ * certificate depend on a network fetch inside the render. The path only works
+ * because `outputFileTracingIncludes` in next.config.mjs forces the .ttf into
+ * the deployed function; Next traces imports, not runtime fs reads.
+ *
+ * Existence is checked first so that a deploy missing the font falls back to
+ * Times-BoldItalic instead of throwing. A certificate that looks slightly wrong
+ * beats one that 500s.
+ */
+const SCRIPT_FAMILY = 'GreatVibes'
+let scriptFontReady = false
+
+try {
+  const fontPath = path.join(process.cwd(), 'lib', 'certificates', 'fonts', 'GreatVibes-Regular.ttf')
+  if (!fs.existsSync(fontPath)) throw new Error(`not found at ${fontPath}`)
+  Font.register({ family: SCRIPT_FAMILY, src: fontPath })
+  scriptFontReady = true
+} catch (e) {
+  console.error('[certificate] Great Vibes not registered, falling back:', (e as Error).message)
+}
+
+/** Script when available, the closest base-14 face when not. */
+const nameFontFamily = () => (scriptFontReady ? SCRIPT_FAMILY : 'Times-BoldItalic')
 
 const NAVY   = '#12466E'
 const GOLD   = '#F2B33D'
@@ -61,9 +88,12 @@ const styles = StyleSheet.create({
   awardedTo: { fontFamily: 'Times-Roman', fontSize: 11.5, marginTop: 44, textAlign: 'center' },
 
   name: {
-    fontFamily: 'Times-BoldItalic',
-    fontSize: 40,
-    marginTop: 16,
+    // Great Vibes sits small on its em square and has long descenders, so it
+    // needs more size and more room beneath it than an upright face would.
+    fontFamily: nameFontFamily(),
+    fontSize: scriptFontReady ? 56 : 40,
+    marginTop: scriptFontReady ? 6 : 16,
+    paddingBottom: scriptFontReady ? 10 : 0,
     textAlign: 'center',
   },
   nameRule: { marginTop: 10, width: 330, height: 1, backgroundColor: '#C9CDD3' },

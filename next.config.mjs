@@ -32,6 +32,14 @@ const nextConfig = {
   // them. This rewrites them to direct per-icon imports at build time.
   experimental: {
     optimizePackageImports: ['lucide-react', 'recharts'],
+
+    // The certificate reads its script font from disk at render time. Next
+    // traces imports, not runtime fs reads, so without this the .ttf is left
+    // out of the deployed function and the font silently falls back.
+    outputFileTracingIncludes: {
+      '/api/employee-of-month/certificate': ['./lib/certificates/fonts/**'],
+      '/api/employee/certificate':          ['./lib/certificates/fonts/**'],
+    },
   },
 
   async headers() {
