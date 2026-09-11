@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { smtpSend, type SmtpAttachment } from './smtp'
 import { appendToSent } from './imap'
 import { getBuffer } from './storage'
+import { checkRecipients, describeBlocked } from './address-guard'
 import {
   recordOutbound,
   threadForReply,
@@ -60,6 +61,29 @@ export async function sendFromAccount(
   let error:  string | null = null
   let rfcMessageId: string | null = null
   let raw: Buffer | null = null
+
+  // Every sender in the app funnels through here — compose, automations,
+  // letters, KYC invites and campaigns — so this is the one place that can
+  // stop a typo-squatted recipient for all of them.
+  const guard = checkRecipients([...input.to, ...(input.cc ?? [])])
+  if (!guard.ok) {
+    console.error('[mail] refused to send:', describeBlocked(guard.blocked))
+    return recordOutbound({
+      accountId:    account.id,
+      fromAddress:  account.address,
+      fromName:     account.display_name,
+      threadId,
+      rfcMessageId: null,
+      inReplyTo:    input.inReplyTo ?? null,
+      to:           input.to,
+      cc:           input.cc,
+      subject:      input.subject,
+      text:         input.text,
+      html:         input.html,
+      status:       'failed',
+      error:        describeBlocked(guard.blocked),
+    })
+  }
 
   try {
     const result = await smtpSend(account, {
