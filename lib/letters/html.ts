@@ -10,6 +10,22 @@ import { LETTER_LABEL, type LetterDoc } from './content'
  * particular) ignore <style> blocks, flexbox and modern CSS. Keep it boring.
  */
 
+/** Same brand tokens as lib/letters/pdf.tsx — kept in sync by hand since one
+ *  lives in a react-pdf StyleSheet and the other in raw HTML strings. */
+const ACCENT_BY_TOKEN: Record<string, string> = {
+  coral:   '#F47A6F',
+  violet:  '#6F5CFF',
+  sky:     '#27C0DE',
+  indigo:  '#5B7BFF',
+  emerald: '#22C58B',
+  amber:   '#F2B544',
+}
+const DEFAULT_ACCENT = '#C0392B'
+
+function accentOf(doc: LetterDoc): string {
+  return (doc.company.color && ACCENT_BY_TOKEN[doc.company.color]) || DEFAULT_ACCENT
+}
+
 function esc(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -19,6 +35,7 @@ function esc(s: string): string {
 }
 
 export function renderLetterEmailHtml(doc: LetterDoc): string {
+  const accent = accentOf(doc)
   const contact = [doc.company.phone, doc.company.email, doc.company.website]
     .filter(Boolean).map((v) => esc(String(v))).join(' &middot; ')
 
@@ -39,8 +56,8 @@ export function renderLetterEmailHtml(doc: LetterDoc): string {
                     font-family:Helvetica,Arial,sans-serif;color:#1f2430;font-size:14px;line-height:1.65;">
 
         <!-- Letterhead -->
-        <tr><td style="padding:26px 32px 16px;border-bottom:2px solid #1f2430;">
-          <div style="font-size:20px;font-weight:bold;color:#111827;">${esc(doc.company.name)}</div>
+        <tr><td style="padding:26px 32px 16px;border-bottom:2px solid ${accent};">
+          <div style="font-size:22px;font-weight:bold;color:${accent};">${esc(doc.company.name)}</div>
           ${address ? `<div style="font-size:12px;color:#5b6270;margin-top:4px;">${address}</div>` : ''}
           ${contact ? `<div style="font-size:12px;color:#5b6270;margin-top:2px;">${contact}</div>` : ''}
         </td></tr>
@@ -60,8 +77,8 @@ export function renderLetterEmailHtml(doc: LetterDoc): string {
           <div style="font-weight:bold;">${esc(doc.recipient.name)}</div>
           ${doc.recipient.email ? `<div style="font-size:12px;color:#5b6270;">${esc(doc.recipient.email)}</div>` : ''}
 
-          <p style="margin:18px 0 14px;font-weight:bold;text-decoration:underline;">
-            Subject: ${esc(doc.subject)}
+          <p style="margin:18px 0 14px;font-weight:bold;text-decoration:underline;text-align:center;text-transform:uppercase;">
+            ${esc(doc.subject)}
           </p>
 
           <p style="margin:0 0 14px;">${esc(doc.salutation)}</p>
@@ -82,7 +99,9 @@ export function renderLetterEmailHtml(doc: LetterDoc): string {
         <!-- Footer -->
         <tr><td style="padding:16px 32px 24px;">
           <div style="border-top:1px solid #e2e5ea;padding-top:12px;font-size:11px;color:#8b929e;text-align:center;">
-            A signed PDF copy of this ${esc(LETTER_LABEL[doc.type].toLowerCase())} is attached.<br>
+            A signed PDF copy of this ${esc(LETTER_LABEL[doc.type].toLowerCase())}${
+              doc.type === 'offer' ? ', including the terms and conditions of employment,' : ''
+            } is attached.<br>
             This is a computer-generated letter issued by ${esc(doc.company.name)}.
           </div>
         </td></tr>

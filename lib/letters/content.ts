@@ -24,6 +24,8 @@ export interface LetterCompany {
   website:               string | null
   signatoryName:         string | null
   signatoryDesignation:  string | null
+  /** Brand token from companies.color (e.g. "coral", "violet") — accents the letterhead. */
+  color?:                string | null
 }
 
 export interface LetterEmployee {
@@ -68,10 +70,14 @@ export function formatLongDate(value: string | Date | null | undefined): string 
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-/** Indian digit grouping, e.g. ₹1,25,000. */
+/**
+ * Indian digit grouping, e.g. INR 1,25,000. Spelled out rather than using the
+ * ₹ glyph — the PDF renderer's base-14 Helvetica font has no Rupee sign, and
+ * silently substitutes the wrong character (₹ → ¹) instead of failing loudly.
+ */
 export function formatINR(amount: number | null | undefined): string {
   if (amount == null || Number.isNaN(amount)) return '—'
-  return `₹${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(amount)}`
+  return `INR ${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(amount)}`
 }
 
 const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
@@ -129,38 +135,39 @@ export function buildOfferLetter(
 
   const paragraphs: string[] = [
     `We are pleased to offer you the position of ${designation} at ${company.name}. ` +
-    `This offer follows our discussions, and we are confident you will be a valuable addition to the team.`,
+    `We were impressed with your profile and believe you will be a valuable addition to our team. ` +
+    `This letter outlines the terms and conditions of your employment with us.`,
 
     joining
-      ? `Your date of joining will be ${formatLongDate(joining)}${
-          employee.department ? `, and you will be part of the ${employee.department} department` : ''
+      ? `You will be employed as a ${designation}. Your date of joining will be ${formatLongDate(joining)}` +
+        `${employee.department ? `, as part of the ${employee.department} department` : ''}. ` +
+        `You will report to the management team of ${company.name}${
+          reporting ? `, with a standard reporting time of ${reporting}` : ''
         }.`
-      : `Your date of joining will be confirmed separately${
-          employee.department ? `. You will be part of the ${employee.department} department` : ''
-        }.`,
+      : `You will be employed as a ${designation}${
+          employee.department ? `, as part of the ${employee.department} department` : ''
+        }. Your date of joining will be confirmed separately.`,
   ]
 
   if (salary != null) {
     paragraphs.push(
-      `Your remuneration will be ${formatINR(salary)} per month ` +
-      `(${amountInWords(salary)} per month), amounting to ${formatINR(salary * 12)} per annum, ` +
-      `subject to statutory deductions as applicable.`,
+      `Your fixed compensation will be ${formatINR(salary)} (${amountInWords(salary)}) in hand per month, ` +
+      `amounting to ${formatINR(salary * 12)} per annum. Salary will be credited on a monthly basis to your ` +
+      `registered bank account, subject to statutory deductions as applicable. Salary revisions will be based ` +
+      `on your performance and will be at the discretion of the management.`,
     )
-  }
-
-  if (reporting) {
-    paragraphs.push(`Your standard reporting time will be ${reporting}, as per company working hours.`)
   }
 
   paragraphs.push(
     `This offer is subject to verification of the documents and information provided by you. ` +
-    `You will be governed by the policies of ${company.name} as amended from time to time.`,
+    `Your employment will be governed by the policies of ${company.name}, as amended from time to time — ` +
+    `including the terms and conditions set out on the following page, which form part of this offer.`,
 
     `Please confirm your acceptance by replying to this letter${
       company.email ? ` at ${company.email}` : ''
     } on or before your date of joining.`,
 
-    `We look forward to welcoming you aboard.`,
+    `We are excited to welcome you to the ${company.name} family and look forward to a long and successful association.`,
   )
 
   return {
@@ -175,6 +182,84 @@ export function buildOfferLetter(
     company,
     signatory:   signatoryOf(company),
   }
+}
+
+/* ── Static Terms & Conditions (offer letters) ───────────────────────────────
+ * Appended as its own PDF page for every offer letter, regardless of company —
+ * the same employment terms for everyone, so this is deliberately NOT part of
+ * the editable paragraph body. Only the company name is substituted.
+ */
+export interface TermsSection {
+  heading: string
+  body:    string[]
+}
+
+export function buildOfferTerms(companyName: string): TermsSection[] {
+  return [
+    {
+      heading: 'Working Hours and Working Days',
+      body: [
+        'Your regular working days will be Monday to Saturday, with working hours from 10:00 AM to 7:30 PM. ' +
+        'Given the nature of the business, you may be required to work on a roster basis, including on weekends ' +
+        'or festival days when business demand is high. In such cases, compensatory offs or adjusted schedules ' +
+        'will be provided as per company policy.',
+      ],
+    },
+    {
+      heading: 'Leave Policy',
+      body: [
+        'You will be entitled to 12 paid sick leaves in a year, accrued at 1 paid sick leave per month, in ' +
+        'addition to declared festival and office holidays. Including sick leaves, festival holidays, and ' +
+        'declared office holidays, you will receive approximately 20 to 25 paid leaves in a year.',
+        'Leaves must be applied for in advance wherever possible and approved by your reporting manager. ' +
+        'Uninformed absence may be treated as leave without pay.',
+      ],
+    },
+    {
+      heading: 'Probation and Confirmation',
+      body: [
+        'You will be on probation for a period of 3 months from your date of joining. Based on your ' +
+        'performance during this period, your employment will be confirmed. The management may extend the ' +
+        'probation period at its discretion if required.',
+      ],
+    },
+    {
+      heading: 'Notice Period',
+      body: [
+        'Either party may terminate this employment by providing 1 month of written notice. In case you wish ' +
+        'to resign, you will be required to serve the full notice period and complete a proper handover of ' +
+        'your responsibilities. The company reserves the right to terminate employment without notice in cases ' +
+        'of misconduct, breach of company policy, or unsatisfactory performance during probation.',
+      ],
+    },
+    {
+      heading: 'Confidentiality',
+      body: [
+        `During your employment, you will have access to confidential information including customer data, ` +
+        `vendor details, pricing, business processes, and marketing strategies. You agree not to disclose, ` +
+        `share, or use this information for any purpose other than the discharge of your duties at ${companyName}, ` +
+        `both during and after your employment.`,
+      ],
+    },
+    {
+      heading: 'Code of Conduct',
+      body: [
+        'You are expected to maintain professional behaviour with customers, vendors, and colleagues at all ' +
+        'times. You will comply with all company policies, processes, and instructions issued by the ' +
+        'management from time to time. Any conduct that harms the reputation or interests of the company may ' +
+        'lead to disciplinary action, including termination.',
+      ],
+    },
+    {
+      heading: 'General Terms',
+      body: [
+        'This offer is contingent upon the verification of your documents, which you are required to submit ' +
+        'on or before your joining date (ID proof, address proof, educational certificates, and bank details).',
+        `Your employment will be governed by the policies of ${companyName}, as amended from time to time. ` +
+        `This offer letter supersedes all prior discussions and communications regarding your employment.`,
+      ],
+    },
+  ]
 }
 
 export function buildReleaseLetter(

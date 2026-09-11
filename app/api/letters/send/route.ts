@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
       website:              company.website,
       signatoryName:        company.signatory_name,
       signatoryDesignation: company.signatory_designation,
+      color:                company.color,
     }
 
     // Letterhead and signatory come from current company settings; the wording

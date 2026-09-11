@@ -71,6 +71,52 @@ export function LetterDrawer({ open, employee, onClose }: Props) {
   const [cc,            setCc]            = React.useState('')
   const [busy,          setBusy]          = React.useState<'preview' | 'send' | 'save' | null>(null)
 
+  /**
+   * True once the admin has typed in the body themselves.
+   *
+   * Overrides used to apply only on an explicit "Regenerate wording", which
+   * made the drawer look broken: you fill in the last working date, the
+   * blocker list still says it is missing, and Send stays greyed out with only
+   * a tooltip to explain why. Now a changed detail refreshes the draft on its
+   * own — except once the wording has been hand-edited, where silently
+   * regenerating would throw that editing away. In that case we prompt instead.
+   */
+  const [bodyEdited, setBodyEdited] = React.useState(false)
+  /** Overrides differ from what the current draft was built with. */
+  const [staleDraft, setStaleDraft] = React.useState(false)
+
+  /** Signature of the overrides the loaded draft was built from. buildDraft
+   *  back-fills `designation` from the employee record, which would otherwise
+   *  look like a user edit and trigger a second, pointless rebuild on open. */
+  const builtWith = React.useRef<string>('')
+  const overrideKey = [designation.trim(), monthlySalary.trim(), joiningDate, lastWorkingDate].join('|')
+
+  /**
+   * Current override values, readable from inside buildDraft.
+   *
+   * buildDraft is a useCallback keyed only on `employee`, so reading the
+   * override state directly captured whatever it held when the callback was
+   * created — always the empty initial values. That silently broke
+   * "Regenerate wording": you could type a last working date, press it, and the
+   * request still went out with no override, so the blocker never cleared and
+   * Send stayed disabled. A ref always holds the latest values.
+   */
+  const overridesRef = React.useRef({ designation, monthlySalary, joiningDate, lastWorkingDate })
+  React.useEffect(() => {
+    overridesRef.current = { designation, monthlySalary, joiningDate, lastWorkingDate }
+  }, [designation, monthlySalary, joiningDate, lastWorkingDate])
+
+  /** Overrides in the shape the draft/send routes expect, omitting blanks. */
+  const currentOverrides = React.useCallback(() => {
+    const o = overridesRef.current
+    return {
+      ...(o.designation.trim()   ? { designation: o.designation.trim() } : {}),
+      ...(o.monthlySalary.trim() ? { monthlySalary: Number(o.monthlySalary) } : {}),
+      ...(o.joiningDate          ? { joiningDate: o.joiningDate } : {}),
+      ...(o.lastWorkingDate      ? { lastWorkingDate: o.lastWorkingDate } : {}),
+    }
+  }, [])
+
   /** Ask the server to compose a draft from employee + company data. */
   const buildDraft = React.useCallback(async (t: LetterType) => {
     if (!employee) return
@@ -84,12 +130,7 @@ export function LetterDrawer({ open, employee, onClose }: Props) {
         body: JSON.stringify({
           employeeId: employee.id,
           type: t,
-          overrides: {
-            ...(designation.trim()   ? { designation: designation.trim() } : {}),
-            ...(monthlySalary.trim() ? { monthlySalary: Number(monthlySalary) } : {}),
-            ...(joiningDate          ? { joiningDate } : {}),
-            ...(lastWorkingDate      ? { lastWorkingDate } : {}),
-          },
+          overrides: currentOverrides(),
         }),
       })
       const d = await r.json().catch(() => ({}))
@@ -97,21 +138,45 @@ export function LetterDrawer({ open, employee, onClose }: Props) {
 
       const data = d as DraftResponse
       setDraft(data)
+      setStaleDraft(false)
+      setBodyEdited(false)
       setReferenceNo(data.doc.referenceNo)
       setSubject(data.doc.subject)
       setBodyText(data.doc.paragraphs.join('\n\n'))
       setFromAccountId((prev) => prev || data.mailboxes[0]?.id || '')
       setToField((prev) => prev || data.employee.email || '')
+
+      const filledDesignation = designation || data.employee.designation || ''
       if (!designation && data.employee.designation) setDesignation(data.employee.designation)
+      // Record what this draft reflects, including the back-filled designation,
+      // so the watcher below doesn't immediately rebuild it again.
+      builtWith.current = [
+        filledDesignation.trim(), monthlySalary.trim(), joiningDate, lastWorkingDate,
+      ].join('|')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not build the letter.')
       setDraft(null)
     } finally {
       setLoading(false)
     }
-    // Overrides are applied on an explicit Regenerate, not on every keystroke.
+    // Overrides are read at call time rather than tracked as deps — the effect
+    // below decides when a rebuild is warranted.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employee])
+
+  /**
+   * Re-compose the letter shortly after a detail that affects the wording
+   * changes, so the blocker list and the Send button reflect what is on screen.
+   * Debounced because the date and salary inputs fire per keystroke.
+   */
+  React.useEffect(() => {
+    if (!open || !employee || !draft) return
+    if (overrideKey === builtWith.current) return     // nothing actually changed
+    if (bodyEdited) { setStaleDraft(true); return }   // don't discard hand-edits
+    const t = setTimeout(() => buildDraft(type), 400)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overrideKey])
 
   // Compose a fresh draft whenever the drawer opens or the letter type changes.
   React.useEffect(() => {
@@ -184,12 +249,7 @@ export function LetterDrawer({ open, employee, onClose }: Props) {
           fromAccountId: fromAccountId || undefined,
           to: toField,
           cc,
-          overrides: {
-            ...(designation.trim()   ? { designation: designation.trim() } : {}),
-            ...(monthlySalary.trim() ? { monthlySalary: Number(monthlySalary) } : {}),
-            ...(joiningDate          ? { joiningDate } : {}),
-            ...(lastWorkingDate      ? { lastWorkingDate } : {}),
-          },
+          overrides: currentOverrides(),
         }),
       })
       const d = await r.json().catch(() => ({}))
@@ -209,6 +269,15 @@ export function LetterDrawer({ open, employee, onClose }: Props) {
   const blockers   = draft?.blockers ?? []
   const isReady    = blockers.length === 0
   const canSend    = isReady && Boolean(toField.trim()) && (draft?.mailboxes.length ?? 0) > 0
+
+  /** Why Send is unavailable, shown next to the button rather than buried in a
+   *  title attribute — a tooltip never appears on a touch screen, which is how
+   *  "the button does nothing" gets reported. */
+  const sendBlockedReason =
+    !isReady                              ? blockers[0]
+    : !toField.trim()                     ? 'Add at least one recipient address.'
+    : (draft?.mailboxes.length ?? 0) === 0 ? 'Connect a mailbox under Email → Mailboxes.'
+    : null
 
   return (
     <>
@@ -269,8 +338,26 @@ export function LetterDrawer({ open, employee, onClose }: Props) {
                     {blockers.map((b, i) => <li key={i}>{b}</li>)}
                   </ul>
                   <p className="mt-1.5 text-[11px] text-coral/80">
-                    Fill the fields below and press <span className="font-semibold">Regenerate wording</span>.
+                    Fill the fields below — the letter updates by itself.
                   </p>
+                </div>
+              )}
+
+              {/* Details changed after the wording was hand-edited: a rebuild
+                  would discard those edits, so ask rather than do it. */}
+              {staleDraft && (
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber/30 bg-amber/5 px-4 py-3">
+                  <p className="text-[12px] text-amber">
+                    You changed a detail after editing the wording. Regenerate to apply it —
+                    this replaces your edits.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => buildDraft(type)}
+                    className="ml-auto rounded-lg border border-amber/40 px-3 py-1 text-[12px] font-medium text-amber hover:bg-amber/10"
+                  >
+                    Regenerate wording
+                  </button>
                 </div>
               )}
 
@@ -339,7 +426,7 @@ export function LetterDrawer({ open, employee, onClose }: Props) {
                 </span>
                 <textarea
                   value={bodyText}
-                  onChange={(e) => setBodyText(e.target.value)}
+                  onChange={(e) => { setBodyText(e.target.value); setBodyEdited(true) }}
                   rows={14}
                   className="w-full resize-y rounded-xl border border-border bg-surface-2/50 px-3 py-2.5 text-[13px] leading-relaxed outline-none focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
                 />
@@ -433,17 +520,17 @@ export function LetterDrawer({ open, employee, onClose }: Props) {
               {busy === 'save' ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
               Generate without sending
             </button>
+            {sendBlockedReason && (
+              <p className="ml-auto max-w-[22rem] text-right text-[11px] leading-snug text-coral">
+                {sendBlockedReason}
+              </p>
+            )}
             <button
               type="button"
               onClick={() => submit(true)}
               disabled={busy !== null || !canSend}
-              title={
-                !isReady ? 'Complete the required details first'
-                  : !toField.trim() ? 'Add at least one recipient'
-                  : (draft?.mailboxes.length ?? 0) === 0 ? 'Connect a mailbox under Email → Mailboxes'
-                  : undefined
-              }
-              className="ml-auto inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-5 text-sm font-medium text-brand-foreground shadow-sm hover:opacity-90 disabled:opacity-50"
+              title={sendBlockedReason ?? undefined}
+              className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-5 text-sm font-medium text-brand-foreground shadow-sm hover:opacity-90 disabled:opacity-50"
             >
               {busy === 'send' ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
               {busy === 'send' ? 'Sending…' : 'Send to employee'}

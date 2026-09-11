@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
       website:              company.website,
       signatoryName:        company.signatory_name,
       signatoryDesignation: company.signatory_designation,
+      color:                company.color,
     }
 
     const letterEmployee: LetterEmployee = {
