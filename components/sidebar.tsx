@@ -12,6 +12,7 @@ import {
   Users,
   CheckSquare,
   CalendarDays,
+  CalendarCheck,
   CalendarOff,
   Settings,
   FileText,
@@ -205,6 +206,7 @@ const PRIMARY: NavItem[] = [
   { href: '/cms/kyc',           label: 'Employee KYC',  icon: BadgeCheck },
   { href: '/cms/tasks',         label: 'Tasks',         icon: CheckSquare },
   { href: '/cms/routine',       label: 'Routine',       icon: Repeat2 },
+  { href: '/cms/monthly-tasks', label: 'Monthly Tasks', icon: CalendarCheck },
   { href: '/cms/announcements', label: 'Announcements', icon: Megaphone },
   { href: '/cms/diary',         label: 'Daily Diary',   icon: NotebookPen },
   {
