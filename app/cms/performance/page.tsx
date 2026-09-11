@@ -3,6 +3,7 @@ import { PerformanceStats } from '@/components/performance/performance-stats'
 import { PerformanceTrend } from '@/components/performance/performance-trend'
 import { Leaderboard } from '@/components/performance/leaderboard'
 import { DepartmentBreakdown } from '@/components/performance/department-breakdown'
+import { EmployeeOfMonthBoard } from '@/components/performance/employee-of-month-board'
 import { getPerformanceOverview } from '@/lib/db/performance'
 
 export const dynamic = 'force-dynamic'
@@ -28,6 +29,8 @@ export default async function PerformancePage() {
           </div>
           <DepartmentBreakdown departments={data.departments} />
         </div>
+
+        <EmployeeOfMonthBoard />
 
         <Leaderboard />
       </main>

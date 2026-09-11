@@ -11,6 +11,7 @@ import { AttendanceLog } from '@/components/employees/profile/attendance-log'
 import { CompletionTrend } from '@/components/employees/profile/completion-trend'
 import { TaskStreak } from '@/components/employees/profile/task-streak'
 import { TodayAttendance } from '@/components/employees/profile/today-attendance'
+import { LetterHistory } from '@/components/employees/profile/letter-history'
 
 export const dynamic = 'force-dynamic'
 
@@ -77,6 +78,7 @@ export default async function EmployeeDetailPage({
               attendance={profile.attendance}
             />
             <CompletedTasks assignments={profile.assignments} />
+            <LetterHistory employeeId={profile.employee.id} />
           </div>
         </div>
       </main>

@@ -11,6 +11,7 @@ import { RecentAttendance }  from '@/components/employee-dashboard/recent-attend
 import { AnnouncementsFeed } from '@/components/employee-dashboard/announcements-feed'
 import { PinnedAnnouncements } from '@/components/employee-dashboard/pinned-announcements'
 import { LeaderboardWidget } from '@/components/leaderboard/leaderboard-widget'
+import { PunctualityCard } from '@/components/employee-dashboard/punctuality-card'
 import { TodayEvents }      from '@/components/employee-dashboard/today-events'
 import { TaskDetailDrawer, type TaskDetail } from '@/components/employee-dashboard/task-detail-drawer'
 import { TaskFormDrawer }    from '@/components/employee-dashboard/task-form-drawer'
@@ -64,6 +65,8 @@ export default function EmployeeDashboard() {
             <AnnouncementsFeed />
           </div>
         </div>
+
+        <PunctualityCard />
 
         {/* Leaderboard — full width below the two-column grid */}
         <LeaderboardWidget currentEmployeeId={employee.id} />
