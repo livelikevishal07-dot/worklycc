@@ -2,13 +2,14 @@
 
 import * as React from 'react'
 import {
-  Search, Trash2, Download, X, ChevronLeft, ChevronRight,
+  Search, Trash2, X, ChevronLeft, ChevronRight,
   ChevronsLeft, ChevronsRight, Calendar, Filter, RotateCcw,
   Pencil, Loader2, Check,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useReveal, maskedINR, MASK } from './reveal-context'
 import { RevealToggle } from './reveal-toggle'
+import { ExportMenu } from './export-menu'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -292,31 +293,6 @@ export function AdminBookingsList({ employees }: Props) {
     }
   }
 
-  function exportCSV() {
-    const headers = [
-      'Order Date','Customer','Phone','City','Event Date','Website',
-      'Occasion','Platform','Total (₹)','Advance (₹)','Pending (₹)','Employee',
-    ]
-    const rows = filtered.map(b => [
-      b.order_date, b.customer_name, b.customer_phone, b.city, b.event_date,
-      b.website, b.occasion, b.booking_platform,
-      ...(revealed
-        ? [b.total_amount, b.advance_paid, b.total_amount - b.advance_paid]
-        : [MASK, MASK, MASK]),
-      b.employee?.full_name ?? '',
-    ])
-    const csv = [headers, ...rows]
-      .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
-      .join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `bookings-${from}_to_${to}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
   const activeFilterCount = [empFilter, city, website, platform, occasion, search, minAmount, maxAmount]
     .filter(Boolean).length
 
@@ -363,11 +339,9 @@ export function AdminBookingsList({ employees }: Props) {
                 Reset ({activeFilterCount})
               </button>
             )}
-            <button onClick={exportCSV}
-              className="flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-brand-foreground hover:opacity-90 transition-opacity">
-              <Download className="size-4" />
-              Export CSV
-            </button>
+            <ExportMenu
+              currentView={{ rows: filtered, filename: `bookings-_to_.csv` }}
+            />
           </div>
         </div>
 
