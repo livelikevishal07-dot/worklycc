@@ -394,12 +394,28 @@ export async function getTaskStats(): Promise<TaskStats> {
 
 // ── Employee-scoped task list ──────────────────────────────────────────────
 
+/** How many days of completed work the dashboard card keeps. */
+const DASHBOARD_DONE_WINDOW_DAYS = 30
+
 export async function listTasksByEmployee(
   employeeId: string,
   params: {
     status?: TaskRow['status']
     priority?: TaskRow['priority']
     search?: string
+    /**
+     * 'dashboard' returns everything still open, plus work completed in the
+     * last 30 days — instead of every task the employee has ever been assigned.
+     *
+     * The dashboard card was pulling all of them with full detail: company,
+     * every assignment with its nested employee, and every checklist item. For
+     * one employee that is 179 tasks and 104 kB on each load, of which 171 were
+     * finished months ago. Most staff open this on mobile data.
+     *
+     * Open tasks are kept regardless of age, so nothing actionable can drop off
+     * the list just because it is old — only finished work ages out.
+     */
+    scope?: 'all' | 'dashboard'
   } = {}
 ): Promise<TaskWithDetails[]> {
   // Step 1: get all task IDs assigned to this employee
@@ -418,6 +434,11 @@ export async function listTasksByEmployee(
     .select(TASK_DETAIL_SELECT)
     .in('id', taskIds)
     .order('created_at', { ascending: false })
+
+  if (params.scope === 'dashboard') {
+    const since = new Date(Date.now() - DASHBOARD_DONE_WINDOW_DAYS * 86400000).toISOString()
+    q = q.or(`status.neq.done,completed_at.gte.${since}`)
+  }
 
   if (params.status) q = q.eq('status', params.status)
   if (params.priority) q = q.eq('priority', params.priority)

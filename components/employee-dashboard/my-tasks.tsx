@@ -122,7 +122,7 @@ export function MyTasks({ onOpen, onNew }: Props) {
     if (!employee.id) { setLoading(false); return }
     setLoading(true)
     try {
-      const r    = await fetch(`/api/tasks?employee_id=${employee.id}`)
+      const r    = await fetch(`/api/tasks?employee_id=${employee.id}&scope=dashboard`)
       const data: Task[] = await r.json()
       setTasks(Array.isArray(data) ? data : [])
     } catch { /* keep previous */ }
@@ -172,8 +172,11 @@ export function MyTasks({ onOpen, onNew }: Props) {
               </span>
             )}
           </div>
+          {/* The card now loads open tasks plus the last 30 days of completed
+              work, not the whole history, so the count is labelled for that
+              window rather than reading as an all-time total. */}
           <p className="text-xs text-ink-soft">
-            {loading ? 'Loading…' : `${doneCount} of ${tasks.length} completed`}
+            {loading ? 'Loading…' : `${doneCount} of ${tasks.length} completed · last 30 days`}
           </p>
         </div>
         <div className="flex items-center gap-2">

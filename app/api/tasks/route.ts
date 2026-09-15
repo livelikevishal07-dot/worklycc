@@ -39,6 +39,8 @@ export async function GET(req: NextRequest) {
           status: (sp.get('status') as TaskRow['status'] | null) ?? undefined,
           priority: (sp.get('priority') as TaskRow['priority'] | null) ?? undefined,
           search: sp.get('search') ?? undefined,
+          // Dashboard card asks for the recent window; the My Tasks page does not.
+          scope: sp.get('scope') === 'dashboard' ? 'dashboard' : 'all',
         })
       )
     }
