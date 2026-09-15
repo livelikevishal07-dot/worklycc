@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useDashboardData, attendanceBetween } from './dashboard-data'
 import { Loader2, RefreshCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useEmployee } from '@/app/employee/context'
@@ -70,37 +71,20 @@ function toDateStr(d = new Date()): string {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function WeekAttendance() {
-  const employee = useEmployee()
-  const [weekRows,  setWeekRows]  = React.useState<AttRow[]>([])
-  const [monthRows, setMonthRows] = React.useState<AttRow[]>([])
-  const [loading,   setLoading]   = React.useState(true)
+  // Both ranges are slices of the one attendance range in the shared bundle;
+  // this card used to make two requests of its own for them.
+  const bundle  = useDashboardData()
+  const loading = bundle.loading && !bundle.data
 
-  const load = React.useCallback(async () => {
-    if (!employee.id) { setLoading(false); return }
-    setLoading(true)
-    try {
-      const now        = new Date()
-      const today      = toDateStr(now)
-      const monthStart = toMonthStart(now)
-      const weekDates  = getWeekDates(now)
-      const weekStart  = weekDates[0]
-      const weekEnd    = weekDates[6]
-
-      const [wRes, mRes] = await Promise.all([
-        fetch(`/api/attendance?employee_id=${employee.id}&from=${weekStart}&to=${weekEnd}`),
-        fetch(`/api/attendance?employee_id=${employee.id}&from=${monthStart}&to=${today}`),
-      ])
-      const [wData, mData] = await Promise.all([wRes.json(), mRes.json()])
-      setWeekRows(Array.isArray(wData) ? wData : [])
-      setMonthRows(Array.isArray(mData) ? mData : [])
-    } catch {
-      // keep previous state
-    } finally {
-      setLoading(false)
+  const { weekRows, monthRows } = React.useMemo(() => {
+    const b = bundle.data
+    if (!b) return { weekRows: [] as AttRow[], monthRows: [] as AttRow[] }
+    const weekDates = getWeekDates(new Date())
+    return {
+      weekRows:  attendanceBetween(b.attendance, weekDates[0], weekDates[6]) as AttRow[],
+      monthRows: attendanceBetween(b.attendance, b.ranges.monthStart, b.today) as AttRow[],
     }
-  }, [employee.id])
-
-  React.useEffect(() => { load() }, [load])
+  }, [bundle.data])
 
   // ── Derived values ─────────────────────────────────────────────────────────
 
@@ -158,7 +142,7 @@ export function WeekAttendance() {
         </div>
         <button
           type="button"
-          onClick={load}
+          onClick={bundle.refresh}
           disabled={loading}
           title="Refresh"
           className="grid size-7 place-items-center rounded-lg text-ink-soft hover:bg-surface-2 hover:text-ink disabled:opacity-40"

@@ -8,6 +8,7 @@ import {
   todayLocalIso,
   type RecurringTaskForEmployee,
 } from '@/lib/recurring-tasks-shared'
+import { useDashboardDataOptional } from './dashboard-data'
 
 const PRIORITY_CONFIG: Record<string, { bar: string; label: string; chip: string }> = {
   urgent: { bar: 'bg-coral',    label: 'Urgent', chip: 'bg-coral/10 text-coral' },
@@ -30,7 +31,16 @@ export function DailyTasksSection({ employeeId, compact = false }: Props) {
   const [loading, setLoading] = React.useState(true)
   const [toggling, setToggling] = React.useState<Set<string>>(new Set())
 
+  // On the dashboard this list rides in the shared bundle. On the tasks page
+  // there is no bundle, so it still fetches for itself.
+  const bundle     = useDashboardDataOptional()
+  const fromBundle = (bundle?.data?.recurring ?? null) as RecurringTaskForEmployee[] | null
+
   React.useEffect(() => {
+    if (bundle) {
+      if (fromBundle) { setTasks(fromBundle); setLoading(false) }
+      return
+    }
     if (!employeeId) return
     setLoading(true)
     fetch(`/api/recurring-tasks?employee_id=${employeeId}&date=${today}`)
@@ -38,7 +48,7 @@ export function DailyTasksSection({ employeeId, compact = false }: Props) {
       .then((d) => setTasks(Array.isArray(d) ? d : []))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [employeeId, today])
+  }, [bundle, fromBundle, employeeId, today])
 
   async function toggleDone(task: RecurringTaskForEmployee) {
     if (toggling.has(task.id)) return

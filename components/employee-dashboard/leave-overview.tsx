@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useEmployee } from '@/app/employee/context'
+import { useDashboardData } from './dashboard-data'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -208,43 +209,32 @@ function ApplyForm({
 export function LeaveOverview() {
   const employee = useEmployee()
 
-  const [balances,  setBalances]  = React.useState<LeaveBalance[]>([])
-  const [requests,  setRequests]  = React.useState<LeaveRequest[]>([])
-  const [holidays,  setHolidays]  = React.useState<Holiday[]>([])
-  const [loading,   setLoading]   = React.useState(true)
+  // Balances, requests and holidays all ride in the shared dashboard bundle.
+  // The entitlements call this card used to make was the same one the stats
+  // strip above it was already making.
+  const bundle  = useDashboardData()
+  const loading = bundle.loading && !bundle.data
+  const load    = bundle.refresh
+
   const [showApply, setShowApply] = React.useState(false)
 
-  const load = React.useCallback(async () => {
-    if (!employee.id) { setLoading(false); return }
-    setLoading(true)
-    const year = new Date().getFullYear()
-    try {
-      const [bRes, rRes, hRes] = await Promise.all([
-        fetch(`/api/leave-entitlements?employee_id=${employee.id}`),
-        fetch(`/api/leave-requests?employee_id=${employee.id}&limit=5`),
-        fetch(`/api/holidays?year=${year}`),
-      ])
-      const [bData, rData, hData] = await Promise.all([bRes.json(), rRes.json(), hRes.json()])
-      // Only show leave types that exist in the current policy
-      const bArr = Array.isArray(bData) ? bData as LeaveBalance[] : []
-      const activeTypes = new Set(bArr.map((b) => b.leave_type))
-      setBalances(bArr)
+  const { balances, requests, holidays } = React.useMemo(() => {
+    const b = bundle.data
+    if (!b) return { balances: [] as LeaveBalance[], requests: [] as LeaveRequest[], holidays: [] as Holiday[] }
+    const bArr = (b.leave.balances ?? []) as LeaveBalance[]
+    // Only show leave types that exist in the current policy
+    const activeTypes = new Set(bArr.map((x) => x.leave_type))
+    return {
+      balances: bArr,
       // Show requests for active policy types AND emergency leave (which is always allowed)
-      setRequests(
-        (Array.isArray(rData) ? rData as LeaveRequest[] : [])
-          .filter((r) => r.type === 'emergency' || activeTypes.has(r.type)),
-      )
+      requests: ((b.leave.requests ?? []) as LeaveRequest[])
+        .filter((r) => r.type === 'emergency' || activeTypes.has(r.type)),
       // Only keep upcoming holidays (from today inclusive, next 4 max)
-      const todayStr = today()
-      const upcoming = (Array.isArray(hData) ? hData as Holiday[] : [])
-        .filter((h) => h.date >= todayStr)
-        .slice(0, 4)
-      setHolidays(upcoming)
-    } catch { /**/ }
-    finally { setLoading(false) }
-  }, [employee.id])
-
-  React.useEffect(() => { load() }, [load])
+      holidays: ((b.holidays ?? []) as Holiday[])
+        .filter((h) => h.date >= b.today)
+        .slice(0, 4),
+    }
+  }, [bundle.data])
 
   const totalRemaining = balances.reduce((s, b) => s + b.remaining, 0)
   const availableTypes = balances.map((b) => b.leave_type)

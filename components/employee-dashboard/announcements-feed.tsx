@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useDashboardData } from './dashboard-data'
 import { Bell, CalendarDays, Info, Loader2, Megaphone, PartyPopper, Pin, RefreshCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -48,27 +49,14 @@ function timeAgo(iso: string): string {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function AnnouncementsFeed() {
-  const [items,   setItems]   = React.useState<Announcement[]>([])
-  const [loading, setLoading] = React.useState(true)
-  const [error,   setError]   = React.useState<string | null>(null)
   const [expanded, setExpanded] = React.useState<string | null>(null)
 
-  const load = React.useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const r = await fetch('/api/announcements')
-      if (!r.ok) throw new Error(`Server error ${r.status}`)
-      const d: Announcement[] = await r.json()
-      setItems(Array.isArray(d) ? d : [])
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  React.useEffect(() => { load() }, [load])
+  // Served from the shared dashboard bundle — this used to be its own request,
+  // fetching the same announcements the pinned banner had already fetched.
+  const bundle  = useDashboardData()
+  const items   = (bundle.data?.announcements ?? []) as Announcement[]
+  const loading = bundle.loading && !bundle.data
+  const error   = bundle.data ? null : bundle.error
 
   const visible = items.slice(0, 6)   // show up to 6; more via "View all"
   const [showAll, setShowAll] = React.useState(false)
@@ -88,7 +76,7 @@ export function AnnouncementsFeed() {
         </div>
         <button
           type="button"
-          onClick={load}
+          onClick={bundle.refresh}
           disabled={loading}
           title="Refresh"
           className="grid size-7 place-items-center rounded-lg text-ink-soft hover:bg-surface-2 hover:text-ink disabled:opacity-40"
@@ -109,7 +97,7 @@ export function AnnouncementsFeed() {
           <p className="text-sm text-coral">{error}</p>
           <button
             type="button"
-            onClick={load}
+            onClick={bundle.refresh}
             className="mt-2 text-xs font-medium text-brand hover:underline"
           >
             Retry

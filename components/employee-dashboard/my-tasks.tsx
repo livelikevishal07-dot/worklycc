@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useEmployee } from '@/app/employee/context'
+import { useDashboardData } from './dashboard-data'
 import { AvatarStack } from '@/components/ui/avatar'
 import { type TaskDetail as Task } from '@/components/employee-dashboard/task-detail-drawer'
 
@@ -114,35 +115,39 @@ interface Props {
 export function MyTasks({ onOpen, onNew }: Props) {
   const employee = useEmployee()
   const [filter, setFilter] = React.useState<'active' | 'all' | 'done'>('active')
-  const [tasks,  setTasks]  = React.useState<Task[]>([])
-  const [loading, setLoading] = React.useState(true)
 
-  // ── Fetch ──────────────────────────────────────────────────────────────────
-  const load = React.useCallback(async () => {
-    if (!employee.id) { setLoading(false); return }
-    setLoading(true)
-    try {
-      const r    = await fetch(`/api/tasks?employee_id=${employee.id}&scope=dashboard`)
-      const data: Task[] = await r.json()
-      setTasks(Array.isArray(data) ? data : [])
-    } catch { /* keep previous */ }
-    finally { setLoading(false) }
-  }, [employee.id])
+  // Tasks come from the shared dashboard bundle — one request for the page.
+  const bundle  = useDashboardData()
+  const loading = bundle.loading && !bundle.data
 
-  React.useEffect(() => { load() }, [load])
+  // Ticks applied straight away, held here until a refresh brings the server's
+  // own answer back.
+  const [pendingStatus, setPendingStatus] = React.useState<Record<string, TaskStatus>>({})
+
+  const tasks = React.useMemo(() => {
+    const list = (bundle.data?.tasks ?? []) as Task[]
+    return list.map((t) => (pendingStatus[t.id] ? { ...t, status: pendingStatus[t.id] } : t))
+  }, [bundle.data, pendingStatus])
 
   // ── Optimistic toggle done ────────────────────────────────────────────────
   async function toggleDone(task: Task) {
     const next: TaskStatus = task.status === 'done' ? 'todo' : 'done'
-    setTasks((p) => p.map((t) => t.id === task.id ? { ...t, status: next } : t))
+    setPendingStatus((p) => ({ ...p, [task.id]: next }))
     try {
-      await fetch(`/api/tasks/${task.id}`, {
+      const r = await fetch(`/api/tasks/${task.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: next }),
       })
-    } catch {
-      setTasks((p) => p.map((t) => t.id === task.id ? { ...t, status: task.status } : t))
+      if (!r.ok) throw new Error('Could not save')
+      // Pull the page back in step: the stat cards count this task too.
+      await bundle.refresh()
+    } catch { /* fall back to whatever the server last said */ }
+    finally {
+      setPendingStatus((p) => {
+        const { [task.id]: _done, ...rest } = p
+        return rest
+      })
     }
   }
 

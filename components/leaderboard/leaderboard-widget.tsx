@@ -4,6 +4,7 @@ import * as React from 'react'
 import { Crown, Loader2, RefreshCcw, Trophy } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
+import { useDashboardDataOptional } from '@/components/employee-dashboard/dashboard-data'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -210,7 +211,25 @@ export function LeaderboardWidget({ currentEmployeeId }: Props) {
     }
   }, [])
 
-  React.useEffect(() => { load(period) }, [load, period])
+  // The employee dashboard's bundle already carries the monthly board, which
+  // is what this opens on. Only a switch to weekly — or the CMS copy of this
+  // widget, which has no bundle — costs a request of its own.
+  const bundle       = useDashboardDataOptional()
+  const fromBundle   = (bundle?.data?.leaderboard ?? null) as LeaderboardEntry[] | null
+  const servedByBundle = Boolean(bundle) && period === 'monthly'
+
+  React.useEffect(() => {
+    if (servedByBundle) {
+      if (fromBundle) { setEntries(fromBundle); setError(null); setLoading(false) }
+      return
+    }
+    load(period)
+  }, [load, period, servedByBundle, fromBundle])
+
+  const reload = React.useCallback(
+    () => (servedByBundle && bundle ? bundle.refresh() : load(period)),
+    [servedByBundle, bundle, load, period],
+  )
 
   // Find current employee's rank for the header badge
   const myEntry = currentEmployeeId
@@ -264,7 +283,7 @@ export function LeaderboardWidget({ currentEmployeeId }: Props) {
           {/* Refresh */}
           <button
             type="button"
-            onClick={() => load(period)}
+            onClick={reload}
             disabled={loading}
             title="Refresh"
             className="grid size-7 place-items-center rounded-lg text-ink-soft hover:bg-surface-2 hover:text-ink disabled:opacity-40"
@@ -285,7 +304,7 @@ export function LeaderboardWidget({ currentEmployeeId }: Props) {
           <p className="text-sm text-coral">{error}</p>
           <button
             type="button"
-            onClick={() => load(period)}
+            onClick={reload}
             className="mt-2 text-xs font-medium text-brand hover:underline"
           >
             Retry

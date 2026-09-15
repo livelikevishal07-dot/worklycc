@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, Clock, LogIn, LogOut, MapPin } from 'lucid
 import { Avatar } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
 import { useEmployee } from '@/app/employee/context'
+import { useDashboardData } from './dashboard-data'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -12,6 +13,7 @@ type AttendanceStatus = 'present' | 'late' | 'absent' | 'half_day' | 'leave' | '
 
 interface AttendanceRow {
   id: string
+  date: string
   login_at: string | null
   logout_at: string | null
   total_minutes: number | null
@@ -180,20 +182,28 @@ export function WelcomeCard() {
     return () => clearInterval(id)
   }, [employee.working_hours_start])
 
-  const today = new Date().toISOString().slice(0, 10)
+  // Today's row rides in the shared dashboard bundle, on the server's day —
+  // the same day the attendance log and week chart are drawn from.
+  const bundle = useDashboardData()
+  const today  = bundle.data?.today ?? new Date().toISOString().slice(0, 10)
 
-  // ── Fetch today's record on mount ────────────────────────────────────────
+  const bundleRow = React.useMemo(() => {
+    const b = bundle.data
+    if (!b) return undefined                       // undefined = not loaded yet
+    return (b.attendance as AttendanceRow[]).find((r) => r.date === b.today) ?? null
+  }, [bundle.data])
+
   React.useEffect(() => {
-    if (!employee.id) { setLoading(false); return }
-    fetch(`/api/attendance?employee_id=${employee.id}&from=${today}&to=${today}`)
-      .then((r) => r.json())
-      .then((d: AttendanceRow[]) => {
-        const rows = Array.isArray(d) ? d : []
-        setRecord(rows[0] ?? null)
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [employee.id, today])
+    if (bundleRow === undefined) return
+    setRecord((prev) => {
+      // A punch can outrun a poll that was already in flight; don't let the
+      // older answer undo the button the employee just pressed.
+      if (prev && !bundleRow) return prev
+      if (prev?.logout_at && bundleRow && !bundleRow.logout_at) return prev
+      return bundleRow
+    })
+    setLoading(false)
+  }, [bundleRow])
 
   // ── Check In ─────────────────────────────────────────────────────────────
   async function checkIn() {
@@ -216,6 +226,7 @@ export function WelcomeCard() {
       if (!r.ok) throw new Error('Failed to check in')
       const data: AttendanceRow = await r.json()
       setRecord(data)
+      bundle.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Check-in failed')
     } finally {
@@ -237,6 +248,7 @@ export function WelcomeCard() {
       if (!r.ok) throw new Error('Failed to check out')
       const data: AttendanceRow = await r.json()
       setRecord(data)
+      bundle.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Check-out failed')
     } finally {

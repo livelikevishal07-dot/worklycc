@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useDashboardData, attendanceBetween } from './dashboard-data'
 import { Clock, Loader2, LogIn, LogOut, RefreshCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useEmployee } from '@/app/employee/context'
@@ -53,38 +54,25 @@ function fmtDate(isoDate: string): { display: string; weekday: string; isToday: 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function RecentAttendance() {
-  const employee = useEmployee()
-  const [rows,        setRows]        = React.useState<AttRow[]>([])
-  const [totalMins,   setTotalMins]   = React.useState(0)
-  const [loading,     setLoading]     = React.useState(true)
-  const [error,       setError]       = React.useState<string | null>(null)
+  // This month's rows come from the shared bundle — the same range the week
+  // chart needs, previously fetched twice.
+  const bundle  = useDashboardData()
+  const loading = bundle.loading && !bundle.data
+  const error   = bundle.data ? null : bundle.error
 
-  const load = React.useCallback(async () => {
-    if (!employee.id) { setLoading(false); return }
-    setLoading(true)
-    setError(null)
-    try {
-      const now        = new Date()
-      const today      = now.toISOString().slice(0, 10)
-      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-
-      const r = await fetch(
-        `/api/attendance?employee_id=${employee.id}&from=${monthStart}&to=${today}`
-      )
-      if (!r.ok) throw new Error(`Server error ${r.status}`)
-      const data: AttRow[] = await r.json()
-      const arr = Array.isArray(data) ? data : []
-      // API returns newest first (order by date desc)
-      setRows(arr.slice(0, 10))
-      setTotalMins(arr.reduce((s, row) => s + (row.total_minutes ?? 0), 0))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load')
-    } finally {
-      setLoading(false)
+  const { rows, totalMins } = React.useMemo(() => {
+    const b = bundle.data
+    if (!b) return { rows: [] as AttRow[], totalMins: 0 }
+    const month = attendanceBetween(b.attendance, b.ranges.monthStart, b.today) as AttRow[]
+    // Newest first, whichever way the bundle happens to be ordered.
+    const desc = [...month].sort((x, y) => (x.date < y.date ? 1 : -1))
+    return {
+      rows: desc.slice(0, 10),
+      totalMins: month.reduce((s, row) => s + (row.total_minutes ?? 0), 0),
     }
-  }, [employee.id])
+  }, [bundle.data])
 
-  React.useEffect(() => { load() }, [load])
+  const load = bundle.refresh
 
   const totalLabel = totalMins > 0 ? `${fmtMinutes(totalMins)} this month` : '—'
 

@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useDashboardData, attendanceBetween } from './dashboard-data'
 import { CalendarCheck, CalendarOff, CheckSquare, Clock, TrendingUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useEmployee } from '@/app/employee/context'
@@ -106,52 +107,29 @@ function StatCard({
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function QuickStats() {
-  const employee = useEmployee()
+  // All three figures come from the shared bundle. This card used to make three
+  // requests of its own, two of which duplicated what other cards on the same
+  // page were already fetching.
+  const bundle = useDashboardData()
 
-  const [taskStats,    setTaskStats]    = React.useState<TaskStats | null>(null)
-  const [leaveBalance, setLeaveBalance] = React.useState<LeaveBalance[] | null>(null)
-  const [weekMins,     setWeekMins]     = React.useState<number | null>(null)
-  const [weekDays,     setWeekDays]     = React.useState<number>(0)
-  const [loadingTasks, setLoadingTasks] = React.useState(true)
-  const [loadingLeave, setLoadingLeave] = React.useState(true)
-  const [loadingWeek,  setLoadingWeek]  = React.useState(true)
+  const taskStats    = (bundle.data?.taskStats ?? null) as TaskStats | null
+  const leaveBalance = (bundle.data?.leave.balances ?? null) as LeaveBalance[] | null
 
-  // 1. Task stats
-  React.useEffect(() => {
-    if (!employee.id) { setLoadingTasks(false); return }
-    fetch(`/api/tasks?employee_id=${employee.id}&stats=1`)
-      .then((r) => r.json())
-      .then((d) => setTaskStats(d))
-      .catch(() => {})
-      .finally(() => setLoadingTasks(false))
-  }, [employee.id])
-
-  // 2. Leave balances
-  React.useEffect(() => {
-    if (!employee.id) { setLoadingLeave(false); return }
-    fetch(`/api/leave-entitlements?employee_id=${employee.id}`)
-      .then((r) => r.json())
-      .then((d) => setLeaveBalance(Array.isArray(d) ? d : null))
-      .catch(() => {})
-      .finally(() => setLoadingLeave(false))
-  }, [employee.id])
-
-  // 3. This-week attendance (hours + days worked)
-  React.useEffect(() => {
-    if (!employee.id) { setLoadingWeek(false); return }
+  const { weekMins, weekDays } = React.useMemo(() => {
+    const b = bundle.data
+    if (!b) return { weekMins: null as number | null, weekDays: 0 }
     const { start, end } = getWeekRange()
-    fetch(`/api/attendance?employee_id=${employee.id}&from=${start}&to=${end}`)
-      .then((r) => r.json())
-      .then((data: AttRow[]) => {
-        const arr = Array.isArray(data) ? data : []
-        const mins = arr.reduce((s, r) => s + (r.total_minutes ?? 0), 0)
-        const days = arr.filter((r) => ['present', 'late', 'half_day'].includes(r.status)).length
-        setWeekMins(mins)
-        setWeekDays(days)
-      })
-      .catch(() => {})
-      .finally(() => setLoadingWeek(false))
-  }, [employee.id])
+    const rows = attendanceBetween(b.attendance, start, end) as AttRow[]
+    return {
+      weekMins: rows.reduce((s, r) => s + (r.total_minutes ?? 0), 0),
+      weekDays: rows.filter((r) => ['present', 'late', 'half_day'].includes(r.status)).length,
+    }
+  }, [bundle.data])
+
+  const pending = bundle.loading && !bundle.data
+  const loadingTasks = pending
+  const loadingLeave = pending
+  const loadingWeek  = pending
 
   // ── Derived values ─────────────────────────────────────────────────────────
 

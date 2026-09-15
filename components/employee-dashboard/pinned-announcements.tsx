@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { useDashboardData } from './dashboard-data'
 
 /**
  * Pinned announcements, surfaced at the very top of the employee dashboard.
@@ -55,9 +56,6 @@ const TYPE_META: Record<AnnouncementType, {
 /** Bodies longer than this get a Read more toggle instead of pushing the page down. */
 const CLAMP_CHARS = 180
 
-/** Re-check periodically so a freshly pinned notice reaches dashboards that are already open. */
-const POLL_MS = 60_000
-
 function formatWhen(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
   const mins = Math.floor(diff / 60_000)
@@ -71,28 +69,14 @@ function formatWhen(iso: string): string {
 }
 
 export function PinnedAnnouncements() {
-  const [pinned, setPinned] = React.useState<Announcement[]>([])
-
-  React.useEffect(() => {
-    let cancelled = false
-
-    async function load() {
-      try {
-        const r = await fetch('/api/announcements', { cache: 'no-store' })
-        if (!r.ok) return
-        const data: Announcement[] = await r.json()
-        if (cancelled || !Array.isArray(data)) return
-        setPinned(data.filter((a) => a.pinned))
-      } catch {
-        // Silent: this is a supplementary banner, and the sidebar feed already
-        // surfaces load failures.
-      }
-    }
-
-    load()
-    const id = setInterval(load, POLL_MS)
-    return () => { cancelled = true; clearInterval(id) }
-  }, [])
+  // The same announcements the sidebar feed shows, from the shared bundle —
+  // this banner used to fetch them a second time on its own minute timer. The
+  // bundle keeps polling, so a freshly pinned notice still arrives.
+  const bundle = useDashboardData()
+  const pinned = React.useMemo(
+    () => ((bundle.data?.announcements ?? []) as Announcement[]).filter((a) => a.pinned),
+    [bundle.data],
+  )
 
   if (pinned.length === 0) return null
 

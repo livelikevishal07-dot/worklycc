@@ -4,6 +4,7 @@ import * as React from 'react'
 import { Award, Clock, Download, Trophy, Loader2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { useDashboardData } from './dashboard-data'
 
 /**
  * The employee's own Employee of the Month standing.
@@ -40,17 +41,10 @@ function monthLabel(period: string) {
 }
 
 export function PunctualityCard() {
-  const [data, setData] = React.useState<Payload | null>(null)
-  const [failed, setFailed] = React.useState(false)
-
-  React.useEffect(() => {
-    let alive = true
-    fetch('/api/employee/of-the-month', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d) => alive && setData(d))
-      .catch(() => alive && setFailed(true))
-    return () => { alive = false }
-  }, [])
+  // Standing arrives with the shared dashboard bundle.
+  const bundle = useDashboardData()
+  const data   = (bundle.data?.eotm ?? null) as Payload | null
+  const failed = !bundle.data && bundle.error !== null
 
   if (failed) return null
   if (!data) {

@@ -17,22 +17,38 @@ import { TaskDetailDrawer, type TaskDetail } from '@/components/employee-dashboa
 import { TaskFormDrawer }    from '@/components/employee-dashboard/task-form-drawer'
 import { DailyTasksSection } from '@/components/employee-dashboard/daily-tasks'
 import { useEmployee }       from '@/app/employee/context'
+import { DashboardDataProvider, useDashboardData } from '@/components/employee-dashboard/dashboard-data'
 
 const BOOKING_DEPARTMENTS = ['Sales', 'Operations']
 
+/**
+ * Every card on this page reads from one request.
+ *
+ * They each used to fetch for themselves — about fourteen requests, with the
+ * leave entitlements, the month's attendance and the announcements each
+ * fetched twice over. The provider does it once and hands out slices.
+ */
 export default function EmployeeDashboard() {
+  return (
+    <DashboardDataProvider>
+      <DashboardBody />
+    </DashboardDataProvider>
+  )
+}
+
+function DashboardBody() {
   const employee = useEmployee()
+  const bundle   = useDashboardData()
   const showBookings = Boolean(employee.department && BOOKING_DEPARTMENTS.includes(employee.department))
   const [detailTask,  setDetailTask]  = React.useState<TaskDetail | null>(null)
   const [detailOpen,  setDetailOpen]  = React.useState(false)
   const [formTask,    setFormTask]    = React.useState<TaskDetail | null>(null)
   const [formOpen,    setFormOpen]    = React.useState(false)
-  const [taskVersion, setTaskVersion] = React.useState(0)
 
   function openDetail(t: TaskDetail) { setDetailTask(t); setDetailOpen(true) }
   function openForm(t?: TaskDetail)  { setFormTask(t ?? null); setFormOpen(true) }
-  function onTaskUpdated(t: TaskDetail) { setDetailTask(t); setTaskVersion((v) => v + 1) }
-  function onSaved() { setTaskVersion((v) => v + 1) }
+  function onTaskUpdated(t: TaskDetail) { setDetailTask(t); bundle.refresh() }
+  function onSaved() { bundle.refresh() }
 
   return (
     <>
@@ -53,7 +69,6 @@ export default function EmployeeDashboard() {
         <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
           <div className="space-y-5">
             <MyTasks
-              key={taskVersion}
               onOpen={openDetail}
               onNew={() => openForm()}
             />
