@@ -154,13 +154,11 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
   // Run all queries in parallel — single network round-trip wave
   const [
     employeesQ,
-    tasksQ,
-    assignmentsQ,
+    countsQ,
     attendanceTodayQ,
     attendanceTrendQ,
     taskCreatedQ,
     taskDoneTrendQ,
-    leaveAllQ,
     pendingLeavesQ,
     bookingsMonthQ,
     departmentsQ,
@@ -175,13 +173,14 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
     supa.from('employees')
       .select('id, full_name, status, avatar_url, department:departments(id, name, color)'),
 
-    // All tasks with status, deadline, completed_at
-    supa.from('tasks')
-      .select('id, title, status, deadline, completed_at, created_at, priority'),
-
-    // Assignments for top performers + completion attribution
-    supa.from('task_assignments')
-      .select('employee_id, task:tasks(status, completed_at)'),
+    // Task counts, leave counts and the top-5 performers, aggregated in
+    // Postgres. These used to be three unbounded selects — every task, every
+    // assignment and every leave row — transferred just to be counted here.
+    supa.rpc('dashboard_counts', {
+      p_today:      today,
+      p_week_start: weekStart,
+      p_last30:     daysAgoISO(30),
+    }),
 
     // Today's attendance
     supa.from('attendance_sessions')
@@ -204,10 +203,6 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
       .select('completed_at')
       .gte('completed_at', trendStart)
       .not('completed_at', 'is', null),
-
-    // All leave for stats counts
-    supa.from('leave_requests')
-      .select('status'),
 
     // Pending leave requests with employee
     supa.from('leave_requests')
@@ -276,20 +271,23 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
   }
 
   // ── Process tasks ───────────────────────────────────────────────────────────
-  const tasks = (tasksQ.data ?? []) as Array<{
-    id: string; title: string; status: string
-    deadline: string | null; completed_at: string | null; created_at: string; priority: string
-  }>
-  const nowISO = new Date().toISOString()
+  /**
+   * Counts from the dashboard_counts() Postgres function. Zeroed if the call
+   * fails so one bad aggregate cannot blank the whole dashboard — the rest of
+   * the page is built from independent queries.
+   */
+  const counts = (countsQ.data ?? {}) as {
+    tasks?: {
+      total: number; todo: number; inProgress: number; done: number
+      overdue: number; completedToday: number; completedThisWeek: number
+    }
+    leave?: { pending: number; approved: number; rejected: number }
+    topPerformers?: Array<{ employee_id: string; completed: number }>
+  }
 
-  const taskStats = {
-    total:      tasks.length,
-    todo:       tasks.filter(t => t.status === 'todo').length,
-    inProgress: tasks.filter(t => t.status === 'in_progress').length,
-    done:       tasks.filter(t => t.status === 'done').length,
-    overdue:    tasks.filter(t => t.status !== 'done' && t.deadline && t.deadline < nowISO).length,
-    completedToday: tasks.filter(t => t.completed_at && t.completed_at.slice(0, 10) === today).length,
-    completedThisWeek: tasks.filter(t => t.completed_at && t.completed_at.slice(0, 10) >= weekStart).length,
+  const taskStats = counts.tasks ?? {
+    total: 0, todo: 0, inProgress: 0, done: 0,
+    overdue: 0, completedToday: 0, completedThisWeek: 0,
   }
 
   // ── Today's attendance ──────────────────────────────────────────────────────
@@ -325,12 +323,7 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
   }))
 
   // ── Leave stats ────────────────────────────────────────────────────────────
-  const allLeave = (leaveAllQ.data ?? []) as Array<{ status: string }>
-  const leaveStats = {
-    pending:  allLeave.filter(l => l.status === 'pending').length,
-    approved: allLeave.filter(l => l.status === 'approved').length,
-    rejected: allLeave.filter(l => l.status === 'rejected').length,
-  }
+  const leaveStats = counts.leave ?? { pending: 0, approved: 0, rejected: 0 }
 
   const pending = (pendingLeavesQ.data ?? []) as any[]
   const pendingLeaves = pending.map(l => ({
@@ -377,17 +370,11 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot> {
   })
 
   // ── Top performers (by completed-task assignments in last 30 days) ─────────
-  const assignments = (assignmentsQ.data ?? []) as unknown as Array<{
-    employee_id: string
-    task: { status: string; completed_at: string | null } | null
-  }>
-  const last30 = daysAgoISO(30)
-  const completionMap = new Map<string, number>()
-  assignments.forEach(a => {
-    if (a.task?.status === 'done' && a.task.completed_at && a.task.completed_at.slice(0, 10) >= last30) {
-      completionMap.set(a.employee_id, (completionMap.get(a.employee_id) ?? 0) + 1)
-    }
-  })
+  // Ranked and capped in SQL; previously every assignment row was transferred
+  // so this Map could be built in memory.
+  const completionMap = new Map<string, number>(
+    (counts.topPerformers ?? []).map((p) => [p.employee_id, p.completed]),
+  )
   const topPerformers = employees
     .map(e => ({
       id: e.id,

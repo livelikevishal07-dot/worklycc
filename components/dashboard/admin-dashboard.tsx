@@ -474,12 +474,41 @@ export function AdminDashboard({ initial }: Props) {
     }
   }
 
-  // Fetch fresh data immediately on mount (clears any stale router-cache snapshot),
-  // then keep auto-refreshing every 60s.
+  /**
+   * Refresh scheduling.
+   *
+   * This used to call refresh() unconditionally on mount, which threw away the
+   * snapshot the server had just rendered and re-ran the whole query set —
+   * every dashboard open cost two full loads instead of one. It was written
+   * that way for a real reason though: Next's client router cache can replay a
+   * stale RSC payload when you navigate back to /cms, so the server snapshot is
+   * not always fresh.
+   *
+   * So: only refetch on mount when the snapshot we were handed is actually
+   * stale. A fresh server render is used as-is.
+   *
+   * The interval is also paused while the tab is hidden. Polling a background
+   * tab every 60s produced load nobody was looking at; on return it catches up
+   * once and resumes.
+   */
   React.useEffect(() => {
-    refresh()
-    const id = setInterval(refresh, 60_000)
-    return () => clearInterval(id)
+    const STALE_AFTER_MS = 30_000
+    const age = Date.now() - new Date(initial.generatedAt).getTime()
+    if (!Number.isFinite(age) || age > STALE_AFTER_MS) refresh()
+
+    let id: ReturnType<typeof setInterval> | undefined
+    const stop  = () => { if (id) clearInterval(id); id = undefined }
+    const start = () => { stop(); id = setInterval(refresh, 60_000) }
+
+    const onVisibility = () => {
+      if (document.hidden) { stop(); return }
+      refresh()
+      start()
+    }
+
+    if (!document.hidden) start()
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => { stop(); document.removeEventListener('visibilitychange', onVisibility) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
