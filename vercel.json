@@ -1,9 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-
-  "//": "Functions run in Mumbai because the Supabase instance is in AWS ap-south-1 (Mumbai) — verified by resolving db.<ref>.supabase.co to an IPv6 address inside AWS's 2406:da1a::/35 ap-south-1 block. The Vercel default is iad1 (Washington DC), which put every single database round trip across the planet: a trivial 8-row query measured ~640ms, the same floor as the heaviest page, because the cost was travel rather than work. Staff are in India too, so nothing is traded away by moving. Hobby allows exactly one region.",
   "regions": ["bom1"],
-
   "crons": [
     {
       "path": "/api/cron/mail-sync",
